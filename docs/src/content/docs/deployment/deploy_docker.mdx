@@ -1,0 +1,95 @@
+---
+title: Docker Compose
+description: Bbb.
+sidebar:
+  order: 20
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+import importedDockerCompose from '../../../../../deployment/docker-compose/docker-compose.yaml?raw';
+import importedAppVersion from '../../../../../VERSION_APP.txt?raw';
+import { Steps } from '@astrojs/starlight/components';
+
+CasaVue is ment to be a index frontpage for applications hosted on a Kubernetes instance. Nevertheless, it can be run on [Docker](https://www.docker.com/) alone.
+
+Dynamic discovery of items works only with [Kubernetes](https://kubernetes.io). While running on plain Docker, items displayed on CasaVue may only be set using [YAML configuration file](/configuration/file#static-items-definitions).
+
+Docker-compose file is available to ease the process of starting and configuring CasaVue.
+
+## Usage
+Create a new directory in your workspace and download `docker-compose.yaml` file for CasaVue App:
+<Tabs>
+  <TabItem label="curl">
+```console
+mkdir CasaVue && cd CasaVue && \
+curl https://casavue.app/docker-compose.yaml > docker-compose.yaml
+```
+  </TabItem>
+  <TabItem label="wget">
+```console
+mkdir CasaVue && cd CasaVue && \
+wget https://casavue.app/docker-compose.yaml
+```
+  </TabItem>
+</Tabs>
+
+### Running main service
+Starting service
+```console
+docker compose up -d
+```
+<Aside>After running above command, service should be available under [`http://127.0.0.1:8080/`](http://127.0.0.1:8080/) in your web browser.</Aside>
+
+Viewing and following logs
+```console
+docker compose logs -f
+```
+
+Stoping service
+```console
+docker compose down
+```
+### Editing configuration
+Configuration files with default content are created upon first application run in `/app/config/` path inside container.
+
+To edit `main.yaml` config file you would:
+<Steps>
+1. Copy `main.yaml` file from container to local folder:
+   ```console
+   docker compose cp casavue:/app/config/main.yaml .
+   ```
+2. Edit `main.yaml` file with your favourite editor.
+3. Copy `main.yaml` file back to container:
+   ```console
+   docker compose cp main.yaml casavue:/app/config/
+   ```
+</Steps>
+
+Same procedure works for editing `items.yaml` file.
+
+<Aside>
+You can use any method for accessing files in Docker `named volumes` in order to edit CasaVue configuration YAML files.
+</Aside>
+
+### Static mode
+For whatever reason should you want to render CasaVue dashboard to HTML static content (e.g. for hosting on [GitHub Pages](https://pages.github.com/)), you can use CasaVue static generation mode. 
+<Aside type="tip">
+  [Edit items configuration file](/deployment/deploy_docker/#editing-configuration) before running the command in order to influence content of generated dashboard.
+</Aside>
+
+Generating static dashboard webpage:
+```console
+docker compose run --rm static
+docker compose cp casavue:/app/dist static
+```
+Directory `dist` should be created and contain generated static webpage.
+While being inside it, start HTTP server to test dashboard, for example:
+```console
+cd static && \
+python -m http.server 8001
+```
+There is more to choose from [big list of http static server one-liners ](https://gist.github.com/willurd/5720255).
+
+## Compose file
+For better understaning in case of advanced users, here is the content of CasaVue docker compose file:
+<Code code={importedDockerCompose.replaceAll('latest',importedAppVersion.trim()+'-distroless')} lang="yaml" title="docker-compose.yaml" />

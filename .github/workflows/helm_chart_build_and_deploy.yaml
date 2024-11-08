@@ -1,0 +1,70 @@
+name: Build and deploy CasaVue Helm Chart
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ VERSION_CHART.txt ]
+  workflow_dispatch:
+
+# Allow this job to clone the repo and create a page deployment
+#permissions:
+  #contents: read
+  #pages: write
+  #id-token: write
+permissions: write-all
+
+jobs:
+  build-helm-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout your repository using git
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Run Trivy vulnerability scanner to index vulnerabilities 
+        uses: aquasecurity/trivy-action@0.23.0
+        with:
+          scan-type: 'config'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          hide-progress: true
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+        
+      - name: Run Trivy vulnerability scanner to fail on HIGH and CRITICAL
+        uses: aquasecurity/trivy-action@0.23.0
+        with:
+          scan-type: 'config'
+          hide-progress: true
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
+          
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          
+      - name: Update Chart versions
+        run: |
+          chmod +x .github/scripts/update_chart_version.sh
+          .github/scripts/update_chart_version.sh
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: deployment
+          skip_existing: true
+        env:
+           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+  trigger-pages-build-and-deploy:
+    needs: build-helm-chart
+    uses: ./.github/workflows/pages_build_and_deploy.yaml

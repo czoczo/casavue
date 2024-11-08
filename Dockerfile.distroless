@@ -1,0 +1,43 @@
+# Docker image definition
+
+# first stage builds Vue frontend
+FROM node:18 as vue-build
+
+ARG TARGETARCH
+
+WORKDIR /build
+COPY ./frontend .
+
+RUN npm install -g pnpm && \
+  pnpm install && \
+  pnpm run build
+
+# second stage builds Go backend
+FROM golang:1.22-bookworm as go-build
+
+WORKDIR /go/src/app
+
+COPY ./config /go/src/app/config
+COPY ./*txt .
+COPY ./*go .
+
+RUN go mod init casavue && \
+  go mod tidy && \
+  mkdir -p /empty/config && \
+  mkdir -p /empty/dist && \
+  CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /casavue .
+
+# final image
+FROM gcr.io/distroless/static-debian12:nonroot
+
+USER nonroot:nonroot
+
+WORKDIR /app
+
+COPY --chown=nonroot:nonroot --from=go-build /casavue /app/
+COPY --chown=nonroot:nonroot --from=go-build /empty/config /app/config
+COPY --chown=nonroot:nonroot --from=go-build /empty/dist /app/dist
+COPY --chown=nonroot:nonroot --from=vue-build /build/dist /app/frontend/dist/
+COPY --chown=nonroot:nonroot --from=vue-build /build/src/assets /app/frontend/src/assets
+
+ENTRYPOINT ["./casavue"]
