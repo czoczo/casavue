@@ -1,9 +1,0 @@
-{{- with .Values.config.main }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: casavue-cfg-main
-data:
-  main.yaml: |-
-    {{- toYaml . | nindent 4 }}
-{{- end }}
