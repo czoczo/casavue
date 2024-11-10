@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "casavue.fullname" . }}
+  labels:
+    {{- include "casavue.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "casavue.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "casavue.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "casavue.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Chart.AppVersion }}-distroless"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          {{- if or .Values.config.items .Values.config.main }}      
+          volumeMounts:
+          {{- end }}
+          {{- if .Values.config.main }}      
+          - mountPath: /app/config/main.yaml
+            subPath: main.yaml
+            name: casavue-cfg-main
+          {{- end }}
+          {{- if .Values.config.items }}      
+          - mountPath: /app/config/items.yaml
+            subPath: items.yaml
+            name: casavue-cfg-items
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if or .Values.config.items .Values.config.main }}      
+      volumes:
+      {{- end }}
+        {{- if .Values.config.main }}      
+        - name: casavue-cfg-main
+          configMap:
+            defaultMode: 420
+            name: casavue-cfg-main
+        {{- end }}
+        {{- if .Values.config.items }}      
+        - name: casavue-cfg-items
+          configMap:
+            defaultMode: 420
+            name: casavue-cfg-items
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

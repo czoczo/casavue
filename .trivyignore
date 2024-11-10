@@ -1,0 +1,5 @@
+# CasaVue needs to write on filesystem for runtime avatar caching and PWA settings updates
+AVD-KSV-0014
+
+# Outdated https://github.com/srwiley/oksvg library
+CVE-2024-24792

@@ -1,0 +1,26 @@
+---
+title: File configuration
+description: How to modify CasaVue behaviour if needed.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import importedCfgMain from '../../../../../config/main.yaml?raw';
+import importedCfgItems from '../../../../../config/items.yaml?raw';
+
+The less config the better! CasaVue is fully functional running on default configuration. Nevertheless, there are some configuration possibilities.  
+
+CasaVue configuration consists of two files: `main.yaml` and `items.yaml`.
+
+Despite editing configuration differs depending on deployment method ([Helm Chart](/deployment/deploy_helm_chart/#configuration) or [Docker Compose](/deployment/deploy_docker/#editing-configuration)), body of YAML configuration is the same.
+
+Below is an example of their contents with a description of the fields.
+
+## Main configuration file
+If you want to modify CasaVue apperance, modyfing default main config file should be enough.
+
+<Code code={importedCfgMain} lang="yaml" title="main.yaml" />
+
+## Static items definitions
+If you need to add a couple of entries from yourself in addition to the Kubernetes ones (or in case there is no entries from K8s), add the entries to the `items.yaml` file according to the example.
+
+<Code code={importedCfgItems} lang="yaml" title="items.yaml" />

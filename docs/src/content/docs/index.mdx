@@ -1,0 +1,43 @@
+---
+title: CasaVue
+description: Getting to know CasaVue.
+template: splash
+hero:
+  tagline: Customizable progressive web application for dynamic indexing of Kubernetes Ingress resources.
+  image:
+    file: ../../assets/logo_tilt.svg
+  actions:
+    - text: Demo
+      link: https://demo.casavue.app
+      icon: external
+      variant: secondary
+    - text: Quick start
+      link: /deployment/quick_start/
+      icon: rocket
+      variant: primary
+    - text: Docs
+      link: /about/overview
+      icon: document
+      variant: secondary
+---
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<img style="margin: 0 auto;" src="/demo.gif"></img>
+
+<br/>
+<CardGrid stagger>
+	<Card title="Works out of the box!" icon="rocket">
+		Default config is fully functional. All you need is running K8s. Read [quick start](/deployment/quick_start/) to get going.
+	</Card>
+	<Card title="Look and feel" icon="pencil">
+		No time to go through quick start? See [DEMO](https://demo.casavue.app) of what CasaVue deployment might look like running on home lab K8s or [this repository](https://github.com/czoczo/casavue-demo), to see how such page is created.
+	</Card>
+	<Card title="Advanced icon search!" icon="add-document">
+    Tired of setting icons on dsahboard? No problem, CasaVue will try to match icons to displayed services. If it fails, a unique avatar is generated. 
+	</Card>
+	<Card title="Customization" icon="setting">
+		Adjust theme color with live preview. Use auto-generated YAML config to persist changes over application reboots. 
+	</Card>
+</CardGrid>
+
+<img style="margin: 0 auto;" src="/devices_preview.png"></img>

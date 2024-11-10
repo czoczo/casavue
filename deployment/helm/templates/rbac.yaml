@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "casavue.fullname" . }}-clusterrole
+rules:
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [list, watch, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "casavue.fullname" . }}-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "casavue.fullname" . }}-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "casavue.serviceAccountName" . }}
+    namespace: {{.Release.Namespace}}
