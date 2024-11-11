@@ -1,10 +1,13 @@
-{{- with .Values.config.items }}
+{{- $items := .Values.config.items }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: casavue-cfg-items
 data:
   items.yaml: |-
+    {{- if $items }}
     items:
-      {{- toYaml . | nindent 4 }}
-{{- end }}
+    {{- toYaml $items | nindent 4 }}
+    {{- else }}
+    items: []
+    {{- end }}
