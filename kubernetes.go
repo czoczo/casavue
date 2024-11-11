@@ -108,6 +108,15 @@ func getAndWatchKubernetesIngressItems() {
 					log.Debug("Skipping item '" + ingress.Name + "' due to pattern")
 					return
 				}
+
+				// skip self
+				if val, ok := ingress.Labels["app.kubernetes.io/name"]; ok {
+					if val == "casavue" {
+						log.Debug("Skipping self: ", ingress.Name)
+						return
+					}
+				}
+
 				_, annotationPresent := ingress.Annotations["casavue.app/enable"]
 				if config.Content_filters.Item.Mode == "ingressAnnotation" && !annotationPresent {
 					log.Debug("Skipping item '" + ingress.Name + "' due to Ingress Annotation mode and lack of annotation.")

@@ -37,6 +37,7 @@ export default {
         if (!this.registration || !this.registration.waiting) return
         // send message to SW to skip the waiting and activate the new SW
         this.registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+        window.location.reload(true)
       },
     },
   }
