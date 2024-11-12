@@ -3,6 +3,16 @@ entries:
   casavue:
   - apiVersion: v2
     appVersion: 0.1.1
+    created: "2024-11-12T21:34:01.565171519Z"
+    description: CasaVue Helm chart
+    digest: 26bb32126e1f44740bb39ab98f0f31f03a430481d5751e7a228758edc2d04646
+    name: casavue
+    type: application
+    urls:
+    - https://github.com/czoczo/casavue/releases/download/casavue-0.1.2/casavue-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
+    appVersion: 0.1.1
     created: "2024-11-11T22:07:53.388583125Z"
     description: CasaVue Helm chart
     digest: 709433abeeba78e5431540f43709ebf3a760e9e1aa8000516370b1b8eb8363a3
@@ -21,4 +31,4 @@ entries:
     urls:
     - https://github.com/czoczo/casavue/releases/download/casavue-0.1.0/casavue-0.1.0.tgz
     version: 0.1.0
-generated: "2024-11-11T22:07:53.38859644Z"
+generated: "2024-11-12T21:34:01.565188681Z"
