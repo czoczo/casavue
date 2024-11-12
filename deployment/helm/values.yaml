@@ -53,6 +53,9 @@ ingress:
     - host: casavue.mydomain.net
       paths: []
   tls: []
+    # - hosts:
+    #     - casavue.mydomain.net
+    #     secretName: casavue-mydomain-net-tls
 
 resources:
   requests:
