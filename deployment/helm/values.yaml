@@ -5,6 +5,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/czoczo/casavue
+  # tag:
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -46,6 +47,7 @@ service:
 
 ingress:
   enabled: false
+  class: ""
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
