@@ -1,6 +1,3 @@
-{{- if not .Values.config.items }}
-  {{- fail "Helm chart requires specifying config.items for a default (or empty) set of default links - you can use --set config.items=[]" }}
-{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -46,9 +43,7 @@ spec:
             httpGet:
               path: /
               port: http
-          {{- if or .Values.config.items .Values.config.main }}
           volumeMounts:
-          {{- end }}
           {{- if .Values.config.main }}
           - mountPath: /app/config/main.yaml
             subPath: main.yaml
@@ -59,9 +54,7 @@ spec:
             name: casavue-cfg-items
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if or .Values.config.items .Values.config.main }}      
       volumes:
-      {{- end }}
         {{- if .Values.config.main }}
         - name: casavue-cfg-main
           configMap:
