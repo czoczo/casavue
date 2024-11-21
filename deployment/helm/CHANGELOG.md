@@ -1,6 +1,6 @@
 # CasaVue Helm Chart Changelog
 
-[ [Application Changelog](../../README.md) ] | [ Helm Chart Changelog ]
+[ [Application Changelog](../../CHANGELOG.md) ] | [ Helm Chart Changelog ]
 
 ## 0.1.3
 - Fixed configuration volume mounts in deployment.
