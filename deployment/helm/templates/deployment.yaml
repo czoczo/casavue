@@ -25,7 +25,11 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if .Values.image.tag }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- else }}
           image: "{{ .Values.image.repository }}:{{ .Chart.AppVersion }}-distroless"
+          {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -39,10 +43,8 @@ spec:
             httpGet:
               path: /
               port: http
-          {{- if or .Values.config.items .Values.config.main }}      
           volumeMounts:
-          {{- end }}
-          {{- if .Values.config.main }}      
+          {{- if .Values.config.main }}
           - mountPath: /app/config/main.yaml
             subPath: main.yaml
             name: casavue-cfg-main
@@ -52,10 +54,8 @@ spec:
             name: casavue-cfg-items
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if or .Values.config.items .Values.config.main }}      
       volumes:
-      {{- end }}
-        {{- if .Values.config.main }}      
+        {{- if .Values.config.main }}
         - name: casavue-cfg-main
           configMap:
             defaultMode: 420
