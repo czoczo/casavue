@@ -7,6 +7,7 @@
 - Added tag overriding.
 - Added IngressClassName handling.
 - Improvements in Chart readability.
+  
 credits and thanks to [@spirilis](https://github.com/spirilis)
 
 ## 0.1.2
