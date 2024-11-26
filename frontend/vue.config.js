@@ -6,9 +6,10 @@ module.exports = defineConfig({
   //  : '/',
   publicPath: './',
   pwa: {
-    //workboxOptions: {
+    workboxOptions: {
+      exclude: [/^api\/v1$/,]
     //  skipWaiting: true
-    //},
+    },
     name: "CasaVue",
     themeColor: "#fe0102",
     msTileColor: "#fe0102",

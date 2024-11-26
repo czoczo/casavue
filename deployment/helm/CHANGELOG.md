@@ -2,6 +2,9 @@
 
 [ [Application Changelog](../../CHANGELOG.md) ] | [ Helm Chart Changelog ]
 
+## 0.1.4
+- App version bump to 0.1.2.
+
 ## 0.1.3
 - Fixed configuration volume mounts in deployment.
 - Added tag overriding.
