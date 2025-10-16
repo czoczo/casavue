@@ -8,6 +8,10 @@ import (
 	"golang.org/x/net/html"
 	"regexp"
 	"strings"
+	"io"
+	"fmt"
+	"net/http"
+	"net/url"
 )
 
 func findIconGitHub(entry *DashEntry, nameValue string) {
@@ -231,4 +235,61 @@ func findHtmlIconDeanishe(entry *DashEntry) {
 	}
 	entry.IconURL = potentialIcon
 	log.Debug("findHtmlIconDeanishe function: found icon: ", entry.IconURL)
+}
+
+func findDefaultFavicon(dashboardItem *DashEntry) {
+	if dashboardItem.URL == "" {
+		log.Error("URL is empty")
+		return
+	}
+
+	// Parse the base URL
+	baseURL, err := url.Parse(dashboardItem.URL)
+	if err != nil {
+		log.Error("invalid URL: ", err)
+		return
+	}
+
+	// Construct base URL (scheme + host)
+	baseURLStr := fmt.Sprintf("%s://%s", baseURL.Scheme, baseURL.Host)
+
+	// List of favicon extensions to try
+	extensions := []string{".ico", ".png", ".svg", ".gif", ".jpg"}
+
+	// Create HTTP client with timeout
+	//client := &http.Client{
+	//	Timeout: 10 * time.Second,
+	//}
+
+	// Try each extension
+	for _, ext := range extensions {
+		faviconURL := baseURLStr + "/favicon" + ext
+
+		// Try to download the favicon
+		resp, err := httpClient.Get(faviconURL)
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			continue
+		}
+
+		// Read the response body
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if err != nil {
+			continue
+		}
+
+		// Validate that it's a proper image
+		if isValidImage(data, ext) {
+			dashboardItem.IconURL = faviconURL
+			return
+		}
+	}
+	
+	log.Debug("findDefaultFavIcon function: valid icon not found ")
 }

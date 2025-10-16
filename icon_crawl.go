@@ -31,6 +31,8 @@ func crawlItem(name string) {
 
 	findHtmlTitle(name, &dashboardItem)
 
+	findDefaultFavicon(&dashboardItem)
+
 	for key, val := range dashboardItem.Labels {
 		// check for app.kubernetes.io/instance label
 		if key == "app.kubernetes.io/instance" {

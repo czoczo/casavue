@@ -15,7 +15,28 @@ import (
 	"regexp"
 	"time"
 	"strings"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 )
+
+// isValidImage checks if the downloaded data is a valid image
+func isValidImage(data []byte, ext string) bool {
+	if len(data) == 0 {
+		return false
+	}
+
+	// Special handling for SVG (text-based format)
+	if ext == ".svg" {
+		content := strings.ToLower(string(data))
+		return strings.Contains(content, "<svg") || strings.Contains(content, "<?xml")
+	}
+
+	// For raster images, try to decode
+	_, _, err := image.Decode(strings.NewReader(string(data)))
+	return err == nil
+}
 
 func initHttpClient(tlsSkipVerify bool) {
 	if tlsSkipVerify {
