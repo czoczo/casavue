@@ -2,6 +2,10 @@
 
 [ Application Changelog ] | [ [Helm Chart Changelog](./deployment/helm/CHANGELOG.md) ]
 
+## 0.1.4
+<WiP> - added default favicon path search
+- updated container building docs
+
 ## 0.1.3
 - WebUI: Fixed items not showing on dashboard when no labels on Ingress resource.
 - App:
