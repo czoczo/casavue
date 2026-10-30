@@ -43,6 +43,7 @@ func main() {
 	flag.Parse()
 
 	dashboardItems.items = make(map[string]DashEntry)
+	dashboardItems.versions = make(map[string]int64)
 
 	// config.go
 	loadConfig()

@@ -150,7 +150,7 @@ export default {
     async checkSiteAvailability() {
       for (const item in this.itemsStatus) {
         try {
-          const response = await axios.head('/statusCheck/?url=' + this.itemsStatus[item].url);
+          const response = await axios.head('/statusCheck/?item=' + encodeURIComponent(item));
           this.updateSiteStatus(item, response.status);
         } catch (error) {
           this.updateSiteStatus(item, error.response ? error.response.status : 'unknown');

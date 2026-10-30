@@ -14,6 +14,10 @@ import (
 	"net/url"
 )
 
+// HTML pages bigger than this are truncated before parsing, so that one remote
+// server can't exhaust the memory of the pod
+const maxDocBytes = 2 << 20
+
 func findIconGitHub(entry *DashEntry, nameValue string) {
 	log.Debug("findIconGitHub looking up: ", nameValue)
 	if entry.IconURL != "" {
@@ -59,7 +63,7 @@ func findHtmlTitle(name string, entry *DashEntry) {
 	}
 	defer resp.Body.Close()
 
-	doc, err := html.Parse(resp.Body)
+	doc, err := html.Parse(io.LimitReader(resp.Body, maxDocBytes))
 	if err != nil {
 		log.Error("findHtmlTitle function error: ", err)
 		return
@@ -100,7 +104,7 @@ func findHtmlIcon(entry *DashEntry, format string) {
 	}
 	defer resp.Body.Close()
 
-	doc, err := html.Parse(resp.Body)
+	doc, err := html.Parse(io.LimitReader(resp.Body, maxDocBytes))
 	if err != nil {
 		log.Error("findHtmlIcon function: html.Parse error: ", err)
 		return
@@ -204,8 +208,11 @@ func findHtmlIconDeanishe(entry *DashEntry) {
 		return
 	}
 
+	// the library fetches pages on its own, so it gets our client: without this
+	// it uses a client with no timeout and a hung server blocks the crawl forever
 	f := favicon.New(
 		favicon.OnlySquare,
+		favicon.WithClient(httpClient),
 	)
 
 	icons, err := f.Find(entry.URL)
@@ -277,7 +284,7 @@ func findDefaultFavicon(dashboardItem *DashEntry) {
 		}
 
 		// Read the response body
-		data, err := io.ReadAll(resp.Body)
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxDocBytes))
 		resp.Body.Close()
 
 		if err != nil {

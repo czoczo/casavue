@@ -1,4 +1,4 @@
-// Kubernetes integration reading Ingress resources
+// Kubernetes integration reading Ingress and Gateway API HTTPRoute resources
 
 package main
 
@@ -56,34 +56,165 @@ func processAnnotations(annotations map[string]string) (description, nameOverrid
 	return
 }
 
-func createDashEntryFromIngress(it *v1.Ingress) (string, DashEntry) {
-	protocol := "http://"
-	name := it.Name
-	description := ""
-	iconURL := ""
+// storeKey is "namespace/name" of the cluster object. It never changes, so
+// overriding the displayed name or moving an annotation cannot leave an item
+// behind under the old key, and identically named Ingresses in different
+// namespaces do not overwrite each other.
+func storeKey(obj metav1.Object) string {
+	return obj.GetNamespace() + "/" + obj.GetName()
+}
 
+// displayName is what the dashboard shows for an item.
+func displayName(obj metav1.Object, nameOverride string) string {
+	if nameOverride != "" {
+		return nameOverride
+	}
+	if label, ok := obj.GetLabels()["app.kubernetes.io/name"]; ok && label != "" {
+		return label
+	}
+	return obj.GetName()
+}
+
+// buildEntry turns a cluster object into a dashboard entry. It reports false
+// when no usable URL can be built out of it.
+func buildEntry(obj metav1.Object, host, protocol string) (DashEntry, bool) {
+	description, nameOverride, iconURL, urlOverride := processAnnotations(obj.GetAnnotations())
+
+	URL := urlOverride
+	if URL == "" {
+		if host == "" {
+			log.Debug("Skipping '", obj.GetName(), "': no host and no URL override.")
+			return DashEntry{}, false
+		}
+		URL = protocol + host
+	}
+
+	return DashEntry{
+		Namespace:   obj.GetNamespace(),
+		Name:        displayName(obj, nameOverride),
+		Description: description,
+		URL:         URL,
+		IconURL:     iconURL,
+		Labels:      obj.GetLabels(),
+	}, true
+}
+
+func dashEntryFromIngress(obj interface{}) (DashEntry, bool) {
+	it, ok := obj.(*v1.Ingress)
+	if !ok {
+		return DashEntry{}, false
+	}
+
+	protocol := "http://"
 	if len(it.Spec.TLS) > 0 {
 		protocol = "https://"
 	}
-	URL := protocol + it.Spec.Rules[0].Host
-
-	desc, nameOverride, iconOverride, urlOverride := processAnnotations(it.Annotations)
-
-	if desc != "" {
-		description = desc
-	}
-	if nameOverride != "" {
-		name = nameOverride
-	}
-	if iconOverride != "" {
-		iconURL = iconOverride
-	}
-	if urlOverride != "" {
-		URL = urlOverride
+	// an Ingress with only a defaultBackend has no rules at all
+	host := ""
+	if len(it.Spec.Rules) > 0 {
+		host = it.Spec.Rules[0].Host
 	}
 
-	log.Debug("Adding Dashboard Item based on ingress '", it.Name, "', with key '", name, "'.")
-	return name, DashEntry{it.Namespace, description, URL, "", iconURL, it.Labels}
+	return buildEntry(it, host, protocol)
+}
+
+func dashEntryFromHTTPRoute(obj interface{}) (DashEntry, bool) {
+	it, ok := obj.(*gatewayv1.HTTPRoute)
+	if !ok {
+		return DashEntry{}, false
+	}
+
+	host := ""
+	if len(it.Spec.Hostnames) > 0 {
+		host = string(it.Spec.Hostnames[0])
+	}
+	// shortcut: CasaVue never reads Gateway listeners, so listener TLS is unknown
+	// and links default to http://. Upgrade by resolving Spec.ParentRefs.
+	return buildEntry(it, host, "http://")
+}
+
+// filteredOut reports whether a cluster object must not be shown on the dashboard.
+func filteredOut(obj metav1.Object) bool {
+	if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, obj.GetNamespace()) {
+		log.Debug("Skipping namespace '" + obj.GetNamespace() + "' due to pattern")
+		return true
+	}
+	if applyFilter(config.Content_filters.Item.Pattern, config.Content_filters.Item.Mode, obj.GetName()) {
+		log.Debug("Skipping item '" + obj.GetName() + "' due to pattern")
+		return true
+	}
+	if obj.GetLabels()["app.kubernetes.io/name"] == "casavue" {
+		log.Debug("Skipping self: ", obj.GetName())
+		return true
+	}
+	if config.Content_filters.Item.Mode == "ingressAnnotation" {
+		_, annotationPresent := obj.GetAnnotations()["casavue.app/enable"]
+		if !annotationPresent {
+			log.Debug("Skipping item '" + obj.GetName() + "' due to Ingress Annotation mode and lack of annotation.")
+			return true
+		}
+	}
+	return false
+}
+
+// dashEntryEventHandlers returns informer callbacks shared by every watched
+// resource type; entryFunc converts an object into a dashboard entry.
+func dashEntryEventHandlers(entryFunc func(interface{}) (DashEntry, bool)) cache.ResourceEventHandlerFuncs {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			meta, ok := obj.(metav1.Object)
+			if !ok || filteredOut(meta) {
+				return
+			}
+			key := storeKey(meta)
+			entry, ok := entryFunc(obj)
+			if !ok {
+				return
+			}
+			log.Info("Dashboard item added: ", key)
+			dashboardItems.write(key, entry)
+			go crawlItem(key)
+		},
+
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			meta, ok := newObj.(metav1.Object)
+			if !ok {
+				return
+			}
+			key := storeKey(meta)
+			newEntry, entryOk := entryFunc(newObj)
+			if !entryOk || filteredOut(meta) {
+				// the object is not to be shown anymore
+				dashboardItems.delete(key)
+				return
+			}
+			oldEntry, oldOk := entryFunc(oldObj)
+			if oldOk && reflect.DeepEqual(oldEntry, newEntry) {
+				// Watch events also carry changes irrelevant to the dashboard, e.g. two
+				// controllers fighting over status.loadBalancer. Without this check such
+				// an object restarts the whole icon crawl over and over.
+				log.Debug("Ignoring update without dashboard relevant changes: ", key)
+				return
+			}
+			log.Info("Dashboard item updated: ", key)
+			dashboardItems.write(key, newEntry)
+			go crawlItem(key)
+		},
+
+		DeleteFunc: func(obj interface{}) {
+			// when the watch connection dropped, the object arrives as a tombstone
+			// whose Key is already "namespace/name"
+			if tomb, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+				log.Info("Dashboard item deleted: ", tomb.Key)
+				dashboardItems.delete(tomb.Key)
+				return
+			}
+			if meta, ok := obj.(metav1.Object); ok {
+				log.Info("Dashboard item deleted: ", storeKey(meta))
+				dashboardItems.delete(storeKey(meta))
+			}
+		},
+	}
 }
 
 func getAndWatchKubernetesIngressItems(kconfig *rest.Config) {
@@ -100,121 +231,11 @@ func getAndWatchKubernetesIngressItems(kconfig *rest.Config) {
 		watchlist,
 		&v1.Ingress{},
 		time.Second*0,
-		cache.ResourceEventHandlerFuncs{
-
-			AddFunc: func(obj interface{}) {
-				ingress := obj.(*v1.Ingress)
-				if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, ingress.Namespace) {
-					log.Debug("Skipping namespace '" + ingress.Namespace + "' due to pattern")
-					return
-				}
-				if applyFilter(config.Content_filters.Item.Pattern, config.Content_filters.Item.Mode, ingress.Name) {
-					log.Debug("Skipping item '" + ingress.Name + "' due to pattern")
-					return
-				}
-
-				// skip self
-				if val, ok := ingress.Labels["app.kubernetes.io/name"]; ok {
-					if val == "casavue" {
-						log.Debug("Skipping self: ", ingress.Name)
-						return
-					}
-				}
-
-				_, annotationPresent := ingress.Annotations["casavue.app/enable"]
-				if config.Content_filters.Item.Mode == "ingressAnnotation" && !annotationPresent {
-					log.Debug("Skipping item '" + ingress.Name + "' due to Ingress Annotation mode and lack of annotation.")
-					return
-				}
-				log.Info("Ingress added: ", ingress.Name)
-				name, dashboardItem := createDashEntryFromIngress(ingress)
-				dashboardItems.write(name, dashboardItem)
-				go crawlItem(name)
-			},
-
-			DeleteFunc: func(obj interface{}) {
-				ingress := obj.(*v1.Ingress)
-				log.Info("Ingress deleted: ", ingress.Name)
-				// store is keyed by the (possibly overridden) item name, not by the Ingress name
-				name, _ := createDashEntryFromIngress(ingress)
-				dashboardItems.delete(name)
-			},
-
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				oldIngress := oldObj.(*v1.Ingress)
-				newIngress := newObj.(*v1.Ingress)
-
-				oldName, oldEntry := createDashEntryFromIngress(oldIngress)
-				newName, newEntry := createDashEntryFromIngress(newIngress)
-
-				// Watch events also carry changes irrelevant to the dashboard, e.g. two
-				// controllers fighting over status.loadBalancer. Without this check such
-				// an object restarts the whole icon crawl over and over.
-				if newName == oldName && reflect.DeepEqual(oldEntry, newEntry) {
-					log.Debug("Ignoring Ingress update without dashboard relevant changes: ", newIngress.Name)
-					return
-				}
-
-				dashboardItems.delete(oldName)
-
-				if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, newIngress.Namespace) {
-					log.Debug("Skipping namespace '" + newIngress.Namespace + "' due to pattern")
-					return
-				}
-				if applyFilter(config.Content_filters.Item.Pattern, config.Content_filters.Item.Mode, newIngress.Name) {
-					log.Debug("Skipping name '" + newIngress.Name + "' due to pattern")
-					return
-				}
-				_, annotationPresent := newIngress.Annotations["casavue.app/enable"]
-				if config.Content_filters.Item.Mode == "ingressAnnotation" && !annotationPresent {
-					log.Debug("Skipping item '" + newIngress.Name + "' due to Ingress Annotation mode and lack of annotation.")
-					return
-				}
-				log.Info("Ingress updated: ", oldName, " -> ", newName)
-				dashboardItems.write(newName, newEntry)
-				go crawlItem(newName)
-			},
-		},
+		dashEntryEventHandlers(dashEntryFromIngress),
 	)
 
-	stop := make(chan struct{})
-	go controller.Run(stop)
-	for {
-		time.Sleep(time.Second)
-	}
-
-}
-
-func createDashEntryFromHTTPRoute(it *gatewayv1.HTTPRoute) (string, DashEntry) {
-	protocol := "http://"
-	name := it.Name
-	description := ""
-	iconURL := ""
-
-	// Check for TLS - simplified logic or annotations?
-
-	URL := ""
-	if len(it.Spec.Hostnames) > 0 {
-		URL = protocol + string(it.Spec.Hostnames[0])
-	}
-
-	desc, nameOverride, iconOverride, urlOverride := processAnnotations(it.Annotations)
-
-	if desc != "" {
-		description = desc
-	}
-	if nameOverride != "" {
-		name = nameOverride
-	}
-	if iconOverride != "" {
-		iconURL = iconOverride
-	}
-	if urlOverride != "" {
-		URL = urlOverride
-	}
-
-	log.Debug("Adding Dashboard Item based on httproute '", it.Name, "', with key '", name, "'.")
-	return name, DashEntry{it.Namespace, description, URL, "", iconURL, it.Labels}
+	// blocks for the lifetime of the process, the function already runs in its own goroutine
+	controller.Run(make(chan struct{}))
 }
 
 func getAndWatchKubernetesGatewayRoutes(kconfig *rest.Config) {
@@ -249,86 +270,9 @@ func getAndWatchKubernetesGatewayRoutes(kconfig *rest.Config) {
 		watchlist,
 		&gatewayv1.HTTPRoute{},
 		time.Second*0,
-		cache.ResourceEventHandlerFuncs{
-
-			AddFunc: func(obj interface{}) {
-				route := obj.(*gatewayv1.HTTPRoute)
-				if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, route.Namespace) {
-					log.Debug("Skipping namespace '" + route.Namespace + "' due to pattern")
-					return
-				}
-				if applyFilter(config.Content_filters.Item.Pattern, config.Content_filters.Item.Mode, route.Name) {
-					log.Debug("Skipping item '" + route.Name + "' due to pattern")
-					return
-				}
-
-				// skip self
-				if val, ok := route.Labels["app.kubernetes.io/name"]; ok {
-					if val == "casavue" {
-						log.Debug("Skipping self: ", route.Name)
-						return
-					}
-				}
-
-				_, annotationPresent := route.Annotations["casavue.app/enable"]
-				if config.Content_filters.Item.Mode == "ingressAnnotation" && !annotationPresent {
-					log.Debug("Skipping item '" + route.Name + "' due to Ingress Annotation mode and lack of annotation.")
-					return
-				}
-				log.Info("HTTPRoute added: ", route.Name)
-				name, dashboardItem := createDashEntryFromHTTPRoute(route)
-				dashboardItems.write(name, dashboardItem)
-				go crawlItem(name)
-			},
-
-			DeleteFunc: func(obj interface{}) {
-				route := obj.(*gatewayv1.HTTPRoute)
-				log.Info("HTTPRoute deleted: ", route.Name)
-				// store is keyed by the (possibly overridden) item name, not by the HTTPRoute name
-				name, _ := createDashEntryFromHTTPRoute(route)
-				dashboardItems.delete(name)
-			},
-
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				oldRoute := oldObj.(*gatewayv1.HTTPRoute)
-				newRoute := newObj.(*gatewayv1.HTTPRoute)
-
-				oldName, oldEntry := createDashEntryFromHTTPRoute(oldRoute)
-				newName, newEntry := createDashEntryFromHTTPRoute(newRoute)
-
-				// Watch events also carry changes irrelevant to the dashboard, e.g. status
-				// only updates. Without this check such an object restarts the crawl.
-				if newName == oldName && reflect.DeepEqual(oldEntry, newEntry) {
-					log.Debug("Ignoring HTTPRoute update without dashboard relevant changes: ", newRoute.Name)
-					return
-				}
-
-				dashboardItems.delete(oldName)
-
-				if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, newRoute.Namespace) {
-					log.Debug("Skipping namespace '" + newRoute.Namespace + "' due to pattern")
-					return
-				}
-				if applyFilter(config.Content_filters.Item.Pattern, config.Content_filters.Item.Mode, newRoute.Name) {
-					log.Debug("Skipping name '" + newRoute.Name + "' due to pattern")
-					return
-				}
-				_, annotationPresent := newRoute.Annotations["casavue.app/enable"]
-				if config.Content_filters.Item.Mode == "ingressAnnotation" && !annotationPresent {
-					log.Debug("Skipping item '" + newRoute.Name + "' due to Ingress Annotation mode and lack of annotation.")
-					return
-				}
-				log.Info("HTTPRoute updated: ", oldName, " -> ", newName)
-				dashboardItems.write(newName, newEntry)
-				go crawlItem(newName)
-			},
-		},
+		dashEntryEventHandlers(dashEntryFromHTTPRoute),
 	)
 
-	stop := make(chan struct{})
-	go controller.Run(stop)
-	for {
-		time.Sleep(time.Second)
-	}
-
+	// blocks for the lifetime of the process, the function already runs in its own goroutine
+	controller.Run(make(chan struct{}))
 }

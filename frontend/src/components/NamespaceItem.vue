@@ -51,19 +51,9 @@ export default {
       return this.itemsStatus[status].status == 'red';
     },
     getItemName(item) {
-      if (!("labels" in item.data)) {
-        return item.name
-      } 
-        
-      if (item.data.labels == null) {
-        return item.name;
-      }
-
-      if (!("app.kubernetes.io/name" in item.data.labels)) {
-        return item.name
-      }
-      
-      return item.data.labels["app.kubernetes.io/name"]
+      // the backend resolves the displayed name: annotation override, then the
+      // app.kubernetes.io/name label, then the cluster object name
+      return item.data.name || item.name
     },
   },
 }

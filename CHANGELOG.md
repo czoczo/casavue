@@ -5,7 +5,15 @@
 ## 0.1.4
 <WiP> - added default favicon path search
 - updated container building docs
-- App: dashboard items are no longer re-crawled on Kubernetes watch events which change nothing on the dashboard (e.g. status only updates). Fixed stale items left behind when an item name is overridden.
+- App:
+  - Fixed process crash when the dashboard API read items while they were updated.
+  - Fixed crash on Ingress without rules and on delete events after a watch reconnect.
+  - Fixed items coming back after delete or rename when a late icon crawl wrote them back.
+  - Items are keyed by namespace and object name, so the same name in two namespaces no longer overwrites itself. API `/api/v1` keys and generated avatar URLs changed accordingly, item display name is now a `name` field.
+  - `/statusCheck/` no longer accepts an arbitrary URL, it checks a dashboard item by key.
+  - Icon crawls are limited to 8 at a time and to 2 MB per page, so a big site cannot exhaust container memory.
+  - Dashboard items are no longer re-crawled on Kubernetes watch events which change nothing on the dashboard (e.g. status only updates).
+  - Fixed static mode (`-static`) crashing when the avatars folder does not exist.
 
 ## 0.1.3
 - WebUI: Fixed items not showing on dashboard when no labels on Ingress resource.

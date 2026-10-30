@@ -186,7 +186,15 @@ func readStaticItems() {
 			continue
 		}
 
-		dashboardItems.write(staticItem.Name, DashEntry{staticItem.Namespace, staticItem.Description, staticItem.URL, "", staticItem.Icon, make(map[string]string)})
+		key := staticItem.Namespace + "/" + staticItem.Name
+		dashboardItems.write(key, DashEntry{
+			Namespace:   staticItem.Namespace,
+			Name:        staticItem.Name,
+			Description: staticItem.Description,
+			URL:         staticItem.URL,
+			IconURL:     staticItem.Icon,
+			Labels:      make(map[string]string),
+		})
 		log.Debug("Added static entry: ", staticItem.Name)
 	}
 	log.Info("Loaded static entries from configuration.")

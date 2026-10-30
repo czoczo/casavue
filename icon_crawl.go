@@ -10,7 +10,15 @@ import (
 	"strings"
 )
 
-func crawlItem(name string) {
+// each crawl parses whole HTML pages (~10 MB heap per MB page), so they may
+// not all run at once on a pod limited to 64 MB
+const maxConcurrentCrawls = 8
+
+var crawlSlots = make(chan struct{}, maxConcurrentCrawls)
+
+func crawlItem(key string) {
+	crawlSlots <- struct{}{}
+	defer func() { <-crawlSlots }()
 
 	// in static generation mode wait,
 	// for all items to complete before exiting
@@ -18,31 +26,34 @@ func crawlItem(name string) {
 		defer wg.Done()
 	}
 
-	dashboardItem, ok := dashboardItems.read(name)
+	dashboardItem, version, ok := dashboardItems.read(key)
 	if !ok {
 		return
 	}
 
 	// uncomment for debuging single item
-	//if name != "item_name" { return }
+	//if key != "namespace/item_name" { return }
 
 	// echo metadata
-	log.Info("Starting icon crawl for '", name, "' at '", dashboardItem.URL)
+	log.Info("Starting icon crawl for '", key, "' at '", dashboardItem.URL)
+
+	// cluster object name: the part of the "namespace/name" store key after the slash
+	name := key[strings.LastIndex(key, "/")+1:]
 
 	findHtmlTitle(name, &dashboardItem)
 
 	findDefaultFavicon(&dashboardItem)
 
-	for key, val := range dashboardItem.Labels {
+	for labelKey, labelVal := range dashboardItem.Labels {
 		// check for app.kubernetes.io/instance label
-		if key == "app.kubernetes.io/instance" {
-			findIconGitHub(&dashboardItem, val)
-			log.Debug("GitHub icon search, based on '", val, "' returned: ", dashboardItem.IconURL)
+		if labelKey == "app.kubernetes.io/instance" {
+			findIconGitHub(&dashboardItem, labelVal)
+			log.Debug("GitHub icon search, based on '", labelVal, "' returned: ", dashboardItem.IconURL)
 		}
 		// check for app.kubernetes.io/name label
-		if key == "app.kubernetes.io/name" {
-			findIconGitHub(&dashboardItem, val)
-			log.Debug("GitHub icon search, based on '", val, "' returned: ", dashboardItem.IconURL)
+		if labelKey == "app.kubernetes.io/name" {
+			findIconGitHub(&dashboardItem, labelVal)
+			log.Debug("GitHub icon search, based on '", labelVal, "' returned: ", dashboardItem.IconURL)
 		}
 	}
 	checkedNames := map[string]bool{}
@@ -82,7 +93,7 @@ func crawlItem(name string) {
 	}
 
 	// last resort - generate avatar
-	getGeneratedIcon(&dashboardItem, name)
+	getGeneratedIcon(&dashboardItem, key)
 
 	// download if static mode
 	if *staticMode {
@@ -91,17 +102,20 @@ func crawlItem(name string) {
 		dashboardItem.IconURL = downloadedIconFile
 	}
 
-	// write result
-	dashboardItems.write(name, dashboardItem)
-	log.Info("Icon crawl result for '", name, "': icon - ", dashboardItem.IconURL, ", title - ", dashboardItem.WebpageTitle)
+	// write result, unless the item was changed or deleted while crawling
+	if !dashboardItems.writeIfVersion(key, version, dashboardItem) {
+		log.Info("Discarding crawl result for '", key, "': item changed while crawling")
+		return
+	}
+	log.Info("Icon crawl result for '", key, "': icon - ", dashboardItem.IconURL, ", title - ", dashboardItem.WebpageTitle)
 }
 
 func refreshItems() {
-	for _, name := range dashboardItems.getKeys() {
+	for _, key := range dashboardItems.getKeys() {
 		if *staticMode {
 			wg.Add(1)
 		}
-		go crawlItem(name)
+		go crawlItem(key)
 	}
 	if *staticMode {
 		wg.Wait()
