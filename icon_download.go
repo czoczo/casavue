@@ -121,6 +121,6 @@ func downloadIcon(fullURLFile string) string {
 	defer resp.Body.Close()
 
 	size, err := io.Copy(file, resp.Body)
-	log.Debug("Downloaded file %s with size %d\n", compiledVuePath+"/"+fileName, size)
+	log.Debugf("Downloaded file %s with size %d", compiledVuePath+"/"+fileName, size)
 	return fileName
 }

@@ -5,6 +5,7 @@
 ## 0.1.4
 <WiP> - added default favicon path search
 - updated container building docs
+- App: dashboard items are no longer re-crawled on Kubernetes watch events which change nothing on the dashboard (e.g. status only updates). Fixed stale items left behind when an item name is overridden.
 
 ## 0.1.3
 - WebUI: Fixed items not showing on dashboard when no labels on Ingress resource.

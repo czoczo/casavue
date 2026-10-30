@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"reflect"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -81,7 +82,7 @@ func createDashEntryFromIngress(it *v1.Ingress) (string, DashEntry) {
 		URL = urlOverride
 	}
 
-	log.Info("Adding Dashboard Item based on ingress '", it.Name, "', with key '", name, "'.")
+	log.Debug("Adding Dashboard Item based on ingress '", it.Name, "', with key '", name, "'.")
 	return name, DashEntry{it.Namespace, description, URL, "", iconURL, it.Labels}
 }
 
@@ -134,14 +135,27 @@ func getAndWatchKubernetesIngressItems(kconfig *rest.Config) {
 			DeleteFunc: func(obj interface{}) {
 				ingress := obj.(*v1.Ingress)
 				log.Info("Ingress deleted: ", ingress.Name)
-				dashboardItems.delete(ingress.Name)
+				// store is keyed by the (possibly overridden) item name, not by the Ingress name
+				name, _ := createDashEntryFromIngress(ingress)
+				dashboardItems.delete(name)
 			},
 
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				oldIngress := oldObj.(*v1.Ingress)
 				newIngress := newObj.(*v1.Ingress)
 
-				dashboardItems.delete(oldIngress.Name)
+				oldName, oldEntry := createDashEntryFromIngress(oldIngress)
+				newName, newEntry := createDashEntryFromIngress(newIngress)
+
+				// Watch events also carry changes irrelevant to the dashboard, e.g. two
+				// controllers fighting over status.loadBalancer. Without this check such
+				// an object restarts the whole icon crawl over and over.
+				if newName == oldName && reflect.DeepEqual(oldEntry, newEntry) {
+					log.Debug("Ignoring Ingress update without dashboard relevant changes: ", newIngress.Name)
+					return
+				}
+
+				dashboardItems.delete(oldName)
 
 				if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, newIngress.Namespace) {
 					log.Debug("Skipping namespace '" + newIngress.Namespace + "' due to pattern")
@@ -156,10 +170,9 @@ func getAndWatchKubernetesIngressItems(kconfig *rest.Config) {
 					log.Debug("Skipping item '" + newIngress.Name + "' due to Ingress Annotation mode and lack of annotation.")
 					return
 				}
-				log.Info("Ingress updated: ", oldIngress.Name, " -> ", newIngress.Name)
-				name, dashboardItem := createDashEntryFromIngress(newIngress)
-				dashboardItems.write(name, dashboardItem)
-				go crawlItem(name)
+				log.Info("Ingress updated: ", oldName, " -> ", newName)
+				dashboardItems.write(newName, newEntry)
+				go crawlItem(newName)
 			},
 		},
 	)
@@ -200,7 +213,7 @@ func createDashEntryFromHTTPRoute(it *gatewayv1.HTTPRoute) (string, DashEntry) {
 		URL = urlOverride
 	}
 
-	log.Info("Adding Dashboard Item based on httproute '", it.Name, "', with key '", name, "'.")
+	log.Debug("Adding Dashboard Item based on httproute '", it.Name, "', with key '", name, "'.")
 	return name, DashEntry{it.Namespace, description, URL, "", iconURL, it.Labels}
 }
 
@@ -271,14 +284,26 @@ func getAndWatchKubernetesGatewayRoutes(kconfig *rest.Config) {
 			DeleteFunc: func(obj interface{}) {
 				route := obj.(*gatewayv1.HTTPRoute)
 				log.Info("HTTPRoute deleted: ", route.Name)
-				dashboardItems.delete(route.Name)
+				// store is keyed by the (possibly overridden) item name, not by the HTTPRoute name
+				name, _ := createDashEntryFromHTTPRoute(route)
+				dashboardItems.delete(name)
 			},
 
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				oldRoute := oldObj.(*gatewayv1.HTTPRoute)
 				newRoute := newObj.(*gatewayv1.HTTPRoute)
 
-				dashboardItems.delete(oldRoute.Name)
+				oldName, oldEntry := createDashEntryFromHTTPRoute(oldRoute)
+				newName, newEntry := createDashEntryFromHTTPRoute(newRoute)
+
+				// Watch events also carry changes irrelevant to the dashboard, e.g. status
+				// only updates. Without this check such an object restarts the crawl.
+				if newName == oldName && reflect.DeepEqual(oldEntry, newEntry) {
+					log.Debug("Ignoring HTTPRoute update without dashboard relevant changes: ", newRoute.Name)
+					return
+				}
+
+				dashboardItems.delete(oldName)
 
 				if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, newRoute.Namespace) {
 					log.Debug("Skipping namespace '" + newRoute.Namespace + "' due to pattern")
@@ -293,10 +318,9 @@ func getAndWatchKubernetesGatewayRoutes(kconfig *rest.Config) {
 					log.Debug("Skipping item '" + newRoute.Name + "' due to Ingress Annotation mode and lack of annotation.")
 					return
 				}
-				log.Info("HTTPRoute updated: ", oldRoute.Name, " -> ", newRoute.Name)
-				name, dashboardItem := createDashEntryFromHTTPRoute(newRoute)
-				dashboardItems.write(name, dashboardItem)
-				go crawlItem(name)
+				log.Info("HTTPRoute updated: ", oldName, " -> ", newName)
+				dashboardItems.write(newName, newEntry)
+				go crawlItem(newName)
 			},
 		},
 	)
