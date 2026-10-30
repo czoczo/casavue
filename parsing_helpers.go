@@ -5,12 +5,13 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	log "github.com/sirupsen/logrus"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var nonAlphanumericRegex = regexp.MustCompile(`[^0-9]+`)

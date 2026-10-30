@@ -1,7 +1,7 @@
 # Docker image definition
 
 # first stage builds Vue frontend
-FROM node:18 as vue-build
+FROM node:18 AS vue-build
 
 ARG TARGETARCH
 
@@ -17,7 +17,7 @@ RUN corepack enable pnpm && \
   pnpm run build
 
 # second stage builds Go backend
-FROM golang:1.24-bookworm as go-build
+FROM golang:1.24-bookworm AS go-build
 
 WORKDIR /go/src/app
 

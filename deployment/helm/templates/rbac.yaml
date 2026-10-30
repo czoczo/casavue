@@ -6,6 +6,9 @@ rules:
   - apiGroups: [networking.k8s.io]
     resources: [ingresses]
     verbs: [list, watch, get]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes]
+    verbs: [list, watch, get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
