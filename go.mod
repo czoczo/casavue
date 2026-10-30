@@ -5,7 +5,6 @@ go 1.24.0
 toolchain go1.24.5
 
 require (
-	github.com/PerformLine/go-stockutil v1.9.5
 	github.com/aofei/cameron v1.2.1
 	github.com/biessek/golang-ico v0.0.0-20180326222316-d348d9ea4670
 	github.com/disintegration/imaging v1.6.2
@@ -28,7 +27,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
-	github.com/fatih/structs v1.1.0 // indirect
 	github.com/friendsofgo/errors v0.9.2 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -39,10 +37,6 @@ require (
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/errwrap v1.0.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/jbenet/go-base58 v0.0.0-20150317085156-6237cf65f3a6 // indirect
-	github.com/jdkato/prose v1.2.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
@@ -67,7 +61,6 @@ require (
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/neurosnap/sentences.v1 v1.0.6 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250814151709-d7b6acb124c3 // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect

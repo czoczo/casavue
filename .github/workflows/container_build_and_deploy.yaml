@@ -14,7 +14,14 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
-permissions: write-all
+# Only what the steps below actually do: pull the repo, push the image, attest it,
+# upload the Trivy SARIF report.
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+  security-events: write
 
 # There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
 jobs:
@@ -42,13 +49,6 @@ jobs:
       matrix:
         flavour: [distroless]
     runs-on: ubuntu-latest
-    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
-    #permissions:
-    #  contents: read
-    #  packages: write
-    #  attestations: write
-    #  id-token: write
-    permissions: write-all
 
     steps:
       - name: Checkout repository
@@ -137,6 +137,8 @@ jobs:
 
   create_app_version_tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     needs:
       - build-and-push-image
     if: needs.build-and-push-image.result == 'success'

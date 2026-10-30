@@ -175,6 +175,7 @@ func regexpReplaceString(s *string, prefix string, swapRegex string, swapValue s
 	// Define regular expressions for the replacements
 	re := regexp.MustCompile(prefix + "(" + swapRegex + ")" + sufix)
 
-	// Perform the replacements
-	*s = re.ReplaceAllString(*s, prefix+swapValue+sufix)
+	// Perform the replacements. Literal: a "$1" in a configured name or title
+	// must not be expanded into a capture group of the expression above.
+	*s = re.ReplaceAllLiteralString(*s, prefix+swapValue+sufix)
 }

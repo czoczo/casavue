@@ -9,23 +9,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode"
 
 	log "github.com/sirupsen/logrus"
 )
 
-var nonAlphanumericRegex = regexp.MustCompile(`[^0-9]+`)
-
-func clearString(str string) string {
-	return nonAlphanumericRegex.ReplaceAllString(str, "")
-}
-
+// getSizeFromString reads the size out of an icon attribute like "32x32".
+// Only the number before "x" is the size, "32x32" is not 3232.
 func getSizeFromString(str string) int {
-	re := regexp.MustCompile("[0-9]+x[0-9]+")
-
-	// Extracting numbers from the first string
-	match := clearString(re.FindString(str))
-	size, _ := strconv.Atoi(match)
+	match := regexp.MustCompile("[0-9]+x[0-9]+").FindString(str)
+	if match == "" {
+		return 0
+	}
+	size, _ := strconv.Atoi(strings.SplitN(match, "x", 2)[0])
 	return size
 }
 
@@ -114,16 +109,6 @@ func applyFilter(pattern string, mode string, str string) bool {
 		// when including, return false on match
 		return !matched
 	}
-}
-
-// IsDigit returns true if the rune is a digit.
-func IsDigit(r rune) bool {
-	return unicode.IsDigit(r)
-}
-
-// RemoveTrailingDigits removes trailing digits from the input string.
-func RemoveTrailingDigits(s string) string {
-	return strings.TrimRightFunc(s, IsDigit)
 }
 
 func firstWord(input string) string {

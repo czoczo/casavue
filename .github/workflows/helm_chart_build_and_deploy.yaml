@@ -6,12 +6,11 @@ on:
     paths: [ VERSION_CHART.txt ]
   workflow_dispatch:
 
-# Allow this job to clone the repo and create a page deployment
-#permissions:
-  #contents: read
-  #pages: write
-  #id-token: write
-permissions: write-all
+# chart-releaser commits and tags the gh-pages branch with the chart index,
+# the Trivy step uploads a SARIF report
+permissions:
+  contents: write
+  security-events: write
 
 jobs:
   build-helm-chart:

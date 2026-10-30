@@ -5,26 +5,131 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/PerformLine/go-stockutil/colorutil"
 	ico "github.com/biessek/golang-ico"
 	"github.com/disintegration/imaging"
 	log "github.com/sirupsen/logrus"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/png"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
+
+// parseThemeColor reads the configured theme color, "#rrggbb" or "#rgb".
+// shortcut: hex only, which is what the configuration documents; upgrade to a
+// full CSS color parser if named or rgb() values are to be accepted.
+func parseThemeColor(value string) (color.NRGBA, error) {
+	hexColor := strings.TrimPrefix(strings.TrimSpace(value), "#")
+	if len(hexColor) == 3 {
+		// "#f0a" means "#ff00aa"
+		hexColor = strings.Repeat(hexColor[0:1], 2) + strings.Repeat(hexColor[1:2], 2) + strings.Repeat(hexColor[2:3], 2)
+	}
+	if len(hexColor) != 6 {
+		return color.NRGBA{}, fmt.Errorf("not a color: %q", value)
+	}
+	rgb, err := strconv.ParseUint(hexColor, 16, 32)
+	if err != nil {
+		return color.NRGBA{}, fmt.Errorf("not a color: %q", value)
+	}
+	return color.NRGBA{
+		R: uint8(rgb >> 16),
+		G: uint8(rgb >> 8),
+		B: uint8(rgb),
+		A: 255,
+	}, nil
+}
+
+func roundToPlaces(x float64, places int) float64 {
+	multi := math.Pow(10, float64(places))
+	return math.Round(x*multi) / multi
+}
+
+// rgbToHsl converts red, green and blue in [0,1] to hue in degrees and
+// saturation and lightness in [0,1]. Values are rounded to 2 places, as the
+// generated logo colors depend on it.
+func rgbToHsl(r, g, b float64) (float64, float64, float64) {
+	max := math.Max(math.Max(r, g), b)
+	min := math.Min(math.Min(r, g), b)
+	chroma := max - min
+
+	hue := 0.0
+	if chroma != 0 {
+		switch {
+		case r == max:
+			hue = math.Mod((g-b)/chroma, 6)
+		case g == max:
+			hue = (b-r)/chroma + 2
+		default:
+			hue = (r-g)/chroma + 4
+		}
+		hue *= 60
+	}
+
+	lightness := (max + min) / 2
+	saturation := 0.0
+	if lightness != 1 {
+		saturation = chroma / (1 - math.Abs(2*lightness-1))
+	}
+	if math.IsNaN(saturation) {
+		// black and white: chroma 0 over 0
+		saturation = 0
+	}
+
+	const rounding = 2
+	hue = roundToPlaces(hue, rounding)
+	saturation = roundToPlaces(saturation, rounding)
+	lightness = roundToPlaces(lightness, rounding)
+	if hue < 0 {
+		hue = 360 + hue
+	}
+	return hue, saturation, lightness
+}
+
+// hslToRgb converts hue in degrees plus saturation and lightness in [0,1] back
+// to red, green and blue.
+func hslToRgb(hue, saturation, lightness float64) (uint8, uint8, uint8) {
+	hue = math.Mod(hue, 360)
+	var r, g, b float64
+	if saturation == 0 {
+		r, g, b = lightness, lightness, lightness
+	} else {
+		chroma := (1 - math.Abs(2*lightness-1)) * saturation
+		sector := hue / 60
+		intermediate := chroma * (1 - math.Abs(math.Mod(sector, 2)-1))
+		switch {
+		case sector <= 1:
+			r, g, b = chroma, intermediate, 0
+		case sector <= 2:
+			r, g, b = intermediate, chroma, 0
+		case sector <= 3:
+			r, g, b = 0, chroma, intermediate
+		case sector <= 4:
+			r, g, b = 0, intermediate, chroma
+		case sector <= 5:
+			r, g, b = intermediate, 0, chroma
+		default:
+			r, g, b = chroma, 0, intermediate
+		}
+		offset := lightness - chroma/2
+		r += offset
+		g += offset
+		b += offset
+	}
+	return uint8(roundToPlaces(r, 2) * 255), uint8(roundToPlaces(g, 2) * 255), uint8(roundToPlaces(b, 2) * 255)
+}
 
 // getContrastColor takes a color in hexadecimal format (e.g. "#aabbcc") and
 // returns a contrasting color in RGB hexadecimal format.
 func getContrastColor(inputColor string) string {
 	// Parse the input color
-	baseColor, err := colorutil.Parse(inputColor)
+	baseColor, err := parseThemeColor(inputColor)
 	if err != nil {
 		// Handle parsing error
 		log.Fatal("Error parsing input color:", err)
@@ -32,7 +137,7 @@ func getContrastColor(inputColor string) string {
 	}
 
 	// Convert to HSL
-	h, s, l := baseColor.HSL()
+	h, s, l := rgbToHsl(float64(baseColor.R)/255, float64(baseColor.G)/255, float64(baseColor.B)/255)
 
 	// Adjust lightness based on the condition
 	if l > 0.5 {
@@ -42,7 +147,7 @@ func getContrastColor(inputColor string) string {
 	}
 
 	// Convert back to RGB
-	r, g, b := colorutil.HslToRgb(h, s, l)
+	r, g, b := hslToRgb(h, s, l)
 	adjustedColor := fmt.Sprintf("#%02x%02x%02x", r, g, b)
 
 	return adjustedColor
@@ -115,7 +220,10 @@ func convertSvgToPng(svgPath string, pngPath string, sideLength int) error {
 
 	// Set the background color
 	canvas := image.NewRGBA(image.Rect(0, 0, sideLength, sideLength))
-	bgColor := colorutil.MustParse(config.Customization.Colors.Theme)
+	bgColor, err := parseThemeColor(config.Customization.Colors.Theme)
+	if err != nil {
+		return err
+	}
 	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
 
 	// Center the image on a new square canvas (with the original side length)
@@ -141,7 +249,11 @@ func svgToRaster(svgContent string, sideLength int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, sideLength, sideLength))
 
 	// Set the background color
-	bgColor := colorutil.MustParse(config.Customization.Colors.Theme)
+	bgColor, err := parseThemeColor(config.Customization.Colors.Theme)
+	if err != nil {
+		log.Error(err)
+		return img
+	}
 	draw.Draw(img, img.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
 
 	// draw icon
