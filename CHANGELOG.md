@@ -24,6 +24,10 @@
 - WebUI:
   - Fixed dashboard breaking after an item was removed while its status was being checked.
   - Status of removed items is no longer kept and re-checked.
+- Docker:
+  - The Vue build stage ran on the end-of-life `node:18` image, whose `corepack` cannot start the pinned pnpm 12 (`Cannot find module .../pnpm.cjs`): the image build failed. It now uses `node:24`.
+  - Added `.dockerignore`. Every build sent 280 MB to the Docker daemon (220 MB of it the local `node_modules`) and the Vue stage installed from that copy instead of from `pnpm-lock.yaml`.
+  - Without a Kubernetes configuration (plain `docker compose up`) the app exited immediately and the container answered nothing. It now serves the items of the config files and logs a warning.
 - CI: Go vet and tests run before a container image is published.
 - CI: `GITHUB_TOKEN` permissions narrowed from `write-all` to what each workflow uses; stale `.trivyignore` entry removed.
 

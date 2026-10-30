@@ -11,6 +11,8 @@ import (
 	//	"time"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
+
 	"k8s.io/client-go/util/homedir"
 )
 
@@ -67,12 +69,15 @@ func main() {
 	}
 
 	// kubernetes.go
+	// without any Kubernetes access the items of the config files are still
+	// served, otherwise the container would exit and show nothing
 	kconfig := getKubeConfig(kubeconfigPath)
 	if kconfig == nil {
-		return
+		log.Warn("No Kubernetes configuration, serving only the items from the config files")
+	} else {
+		go getAndWatchKubernetesIngressItems(kconfig)
+		go getAndWatchKubernetesGatewayRoutes(kconfig)
 	}
-	go getAndWatchKubernetesIngressItems(kconfig)
-	go getAndWatchKubernetesGatewayRoutes(kconfig)
 
 	// httpserver.go
 	initHttpServer()

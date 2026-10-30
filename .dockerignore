@@ -1,0 +1,15 @@
+# Only the Go sources and the Vue sources are read by the image build. Without
+# this the 220 MB of local node_modules, the local binary and the docs are sent
+# to the daemon on every build, and the Vue stage would install from the copied
+# node_modules instead of from pnpm-lock.yaml.
+.git
+.github
+docs
+deployment
+avatars
+casavue
+/*.gif
+/*.png
+
+frontend/node_modules
+frontend/dist
