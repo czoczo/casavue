@@ -115,7 +115,15 @@ export default {
               this.visibleNamespaces[this.data[key].namespace] = true;
             }
             if (!this.itemsStatus[key]) {
-              this.itemsStatus[key] = {name: key, url: this.data[key].url, status: "gray"};
+              this.itemsStatus[key] = {name: key, status: "gray"};
+            }
+          }
+
+          // drop status of items which disappeared from the dashboard,
+          // so they are not checked forever
+          for (const key in this.itemsStatus) {
+            if (!this.data[key]) {
+              delete this.itemsStatus[key];
             }
           }
 
@@ -158,9 +166,12 @@ export default {
       }
     },
     updateSiteStatus(name, status) {
+      if (!this.itemsStatus[name]) {
+        // the item left the dashboard while its check was running
+        return;
+      }
       const validStatusCodes = [200, 401];
-      const siteStatus = validStatusCodes.includes(status) ? 'green' : 'red';
-      this.itemsStatus[name] = {name: name, url: this.data[name].url, status: siteStatus};
+      this.itemsStatus[name].status = validStatusCodes.includes(status) ? 'green' : 'red';
     },
   },
   created() {

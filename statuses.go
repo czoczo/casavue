@@ -32,7 +32,8 @@ func statusCheckHandler(w http.ResponseWriter, r *http.Request) {
 
 	dashboardItem, _, found := dashboardItems.read(key)
 	if !found || dashboardItem.URL == "" {
-		fmt.Fprintf(w, "%d", 0)
+		// not a dashboard item, nothing to check
+		http.Error(w, "unknown dashboard item", http.StatusNotFound)
 		return
 	}
 

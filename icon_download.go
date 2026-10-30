@@ -62,11 +62,11 @@ func downloadIcon(fullURLFile string) string {
 		return fullURLFile
 	}
 
-	// save to file if SVF data in string
-	if strings.HasPrefix(fullURLFile, "data:image/svg+xml,") {
+	// save to file if SVG data in string
+	if _, svgData, isSvgData := strings.Cut(fullURLFile, "data:image/svg+xml,"); isSvgData {
 		// build avatar filename and path
 		fileName := downloadedAvatarsPath + "/" + strToSha256(fullURLFile) + ".svg"
-		writeStringFile(compiledVuePath+"/"+fileName, fullURLFile[20:])
+		writeStringFile(compiledVuePath+"/"+fileName, svgData)
 		return fileName
 	}
 
@@ -90,16 +90,10 @@ func downloadIcon(fullURLFile string) string {
 	// Create a blank file
 	file, err := os.Create(compiledVuePath + "/" + fileName)
 	if err != nil {
-		log.Fatal("Error creating file: ", err)
+		log.Error("Error creating file: ", err)
+		return fullURLFile
 	}
 	defer file.Close()
-
-	//client := http.Client{
-	//	CheckRedirect: func(r *http.Request, via []*http.Request) error {
-	//		r.URL.Opaque = r.URL.Path
-	//		return nil
-	//	},
-	//}
 
 	// sanitize URL
 	domain := strings.Join(strings.Split(fullURLFile, "/")[:3], "/")
@@ -113,10 +107,22 @@ func downloadIcon(fullURLFile string) string {
 	resp, err := httpClient.Get(downloadURL)
 	if err != nil {
 		log.Error("Error downloading content: ", err)
+		// no local copy, keep pointing at the original URL
+		return fullURLFile
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		log.Error("Error downloading icon '", downloadURL, "': status ", resp.StatusCode)
+		return fullURLFile
+	}
+
 	size, err := io.Copy(file, resp.Body)
+	if err != nil {
+		log.Error("Error saving icon '", fileName, "': ", err)
+		os.Remove(compiledVuePath + "/" + fileName)
+		return fullURLFile
+	}
 	log.Debugf("Downloaded file %s with size %d", compiledVuePath+"/"+fileName, size)
 	return fileName
 }

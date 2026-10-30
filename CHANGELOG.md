@@ -14,6 +14,13 @@
   - Icon crawls are limited to 8 at a time and to 2 MB per page, so a big site cannot exhaust container memory.
   - Dashboard items are no longer re-crawled on Kubernetes watch events which change nothing on the dashboard (e.g. status only updates).
   - Fixed static mode (`-static`) crashing when the avatars folder does not exist.
+  - Fixed static mode saving an error page or a truncated file as an icon; the original icon URL is kept when the download fails.
+  - Fixed `casavue.app/enable=false` not hiding an item in `ingressAnnotation` mode.
+  - One HTTP request less per item when looking up icons.
+- WebUI:
+  - Fixed dashboard breaking after an item was removed while its status was being checked.
+  - Status of removed items is no longer kept and re-checked.
+- CI: Go vet and tests run before a container image is published.
 
 ## 0.1.3
 - WebUI: Fixed items not showing on dashboard when no labels on Ingress resource.

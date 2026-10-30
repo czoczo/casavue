@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -147,14 +148,26 @@ func filteredOut(obj metav1.Object) bool {
 		log.Debug("Skipping self: ", obj.GetName())
 		return true
 	}
-	if config.Content_filters.Item.Mode == "ingressAnnotation" {
-		_, annotationPresent := obj.GetAnnotations()["casavue.app/enable"]
-		if !annotationPresent {
-			log.Debug("Skipping item '" + obj.GetName() + "' due to Ingress Annotation mode and lack of annotation.")
-			return true
-		}
+	if config.Content_filters.Item.Mode == "ingressAnnotation" && !enabledByAnnotation(obj.GetAnnotations()) {
+		log.Debug("Skipping item '" + obj.GetName() + "' due to Ingress Annotation mode and no enabled annotation.")
+		return true
 	}
 	return false
+}
+
+// enabledByAnnotation reports whether the casavue.app/enable annotation allows
+// the object: in "ingressAnnotation" mode the annotation is required, and its
+// value can turn a single item off again.
+func enabledByAnnotation(annotations map[string]string) bool {
+	value, present := annotations["casavue.app/enable"]
+	if !present {
+		return false
+	}
+	switch strings.ToLower(value) {
+	case "false", "no", "off":
+		return false
+	}
+	return true
 }
 
 // dashEntryEventHandlers returns informer callbacks shared by every watched

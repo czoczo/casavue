@@ -106,6 +106,23 @@ func TestStoreKeyKeepsSameNamedIngressesApart(t *testing.T) {
 	}
 }
 
+func TestEnableAnnotation(t *testing.T) {
+	it := immichIngress()
+	if enabledByAnnotation(it.Annotations) {
+		t.Error("in ingressAnnotation mode an object without the annotation must stay hidden")
+	}
+
+	for value, expected := range map[string]bool{
+		// empty value keeps meaning "enabled", that is what bare annotations did before
+		"true": true, "True": true, "": true, "false": false, "no": false, "off": false,
+	} {
+		it.Annotations = map[string]string{"casavue.app/enable": value}
+		if got := enabledByAnnotation(it.Annotations); got != expected {
+			t.Errorf("casavue.app/enable=%q: got %v, expected %v", value, got, expected)
+		}
+	}
+}
+
 func TestDisplayNamePrecedence(t *testing.T) {
 	it := immichIngress()
 	if got := displayName(it, ""); got != "public-proxy" {

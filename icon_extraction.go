@@ -201,13 +201,6 @@ func findHtmlIconDeanishe(entry *DashEntry) {
 		return
 	}
 
-	// return, if endpoint unreachable
-	_, err := httpClient.Get(strings.TrimSpace(entry.URL))
-	if err != nil {
-		log.Error("findHtmlIconDeanishe function: http.Get error: ", err)
-		return
-	}
-
 	// the library fetches pages on its own, so it gets our client: without this
 	// it uses a client with no timeout and a hung server blocks the crawl forever
 	f := favicon.New(
