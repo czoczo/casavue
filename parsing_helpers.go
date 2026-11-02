@@ -5,7 +5,6 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,58 +21,6 @@ func getSizeFromString(str string) int {
 	}
 	size, _ := strconv.Atoi(strings.SplitN(match, "x", 2)[0])
 	return size
-}
-
-func getHostFromURL(inputUrl string) string {
-	url, err := url.Parse(inputUrl)
-	if err != nil {
-		log.Error(err)
-		return ""
-	}
-
-	return url.Host
-}
-
-func extractContent(input string) string {
-	// Split the input string by slashes
-	parts := strings.Split(input, "/")
-
-	// return if there are no additional slashes in endpoint
-	if len(parts) < 4 {
-		return input
-	}
-
-	// Join the parts up to the last slash (inclusive)
-	result := strings.Join(parts[:len(parts)-1], "/") + "/"
-
-	return result
-}
-
-func extractBeforeHash(input string) string {
-	if idx := strings.IndexByte(input, '#'); idx >= 0 {
-		return input[:idx]
-	}
-	return input
-}
-
-func addPrefix(fqdn string, endpoint string) string {
-	fqdn = extractContent(fqdn)
-	fqdn = extractBeforeHash(fqdn)
-
-	if strings.HasPrefix(endpoint, "https") {
-		return endpoint
-	}
-
-	// get hostname from FQDN
-	u, err := url.Parse(fqdn)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if !strings.HasPrefix(endpoint, "/") {
-		return strings.TrimRight(fqdn, "/") + "/" + endpoint
-	}
-	return u.Scheme + "://" + u.Hostname() + "/" + strings.TrimLeft(endpoint, "/")
 }
 
 func strToSha256(input string) string {

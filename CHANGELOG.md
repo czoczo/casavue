@@ -16,11 +16,12 @@
   - Fixed static mode (`-static`) crashing when the avatars folder does not exist.
   - Fixed static mode saving an error page or a truncated file as an icon; the original icon URL is kept when the download fails.
   - Fixed `casavue.app/enable=false` not hiding an item in `ingressAnnotation` mode.
-  - One HTTP request less per item when looking up icons.
+  - Icons are picked from every icon a site announces (HTML `<link>`, manifest, well-known paths, social cards) plus the dashboard-icons pack, each downloaded and scored by its real format and dimensions, instead of a fixed order of lookups. The site HTML is fetched once per crawl.
   - Icon size attributes like `32x32` are read as 32 instead of 3232, so the largest icon of a site is picked correctly.
   - Customization values containing `$` (title, app name) no longer break the generated `index.html`.
   - Generated avatars are cached by the browser for a day instead of being generated again on every view.
   - Removed unused dependency `PerformLine/go-stockutil`; 6 modules less in `go.mod` and in image scans.
+  - Removed dependency `go.deanishe.net/favicon`; 5 modules less in `go.mod` and in image scans.
 - WebUI:
   - Fixed dashboard breaking after an item was removed while its status was being checked.
   - Status of removed items is no longer kept and re-checked.
