@@ -13,6 +13,7 @@
   - `/statusCheck/` no longer accepts an arbitrary URL, it checks a dashboard item by key.
   - Icon crawls are limited to 8 at a time and to 2 MB per page, so a big site cannot exhaust container memory.
   - Dashboard items are no longer re-crawled on Kubernetes watch events which change nothing on the dashboard (e.g. status only updates).
+  - HTTPRoute links are `https://` when a listener of the Gateway they attach to terminates TLS for their hostname, like an Ingress with a `tls` section; plain `http://` is only the fallback. A route with several hostnames is linked to one the Gateway serves. Needs read access to `gateways` (`gateway.networking.k8s.io`), added to the Helm ClusterRole; without it the routes are still shown, with `http://`.
   - Fixed static mode (`-static`) crashing when the avatars folder does not exist.
   - Fixed static mode saving an error page or a truncated file as an icon; the original icon URL is kept when the download fails.
   - Fixed `casavue.app/enable=false` not hiding an item in `ingressAnnotation` mode.

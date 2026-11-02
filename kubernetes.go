@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -125,13 +126,161 @@ func dashEntryFromHTTPRoute(obj interface{}) (DashEntry, bool) {
 		return DashEntry{}, false
 	}
 
-	host := ""
-	if len(it.Spec.Hostnames) > 0 {
-		host = string(it.Spec.Hostnames[0])
+	host, protocol := routeHostAndProtocol(it)
+	return buildEntry(it, host, protocol)
+}
+
+// listenerStore keeps the listeners of every watched Gateway by "namespace/name".
+// An HTTPRoute has no TLS of its own, it is terminated by the listeners of the
+// Gateway it attaches to, so those have to be known to link to the route with the
+// right protocol. Written by the Gateway informer, read while an entry is built.
+type listenerStore struct {
+	sync.RWMutex
+	byKey map[string][]gatewayv1.Listener
+}
+
+var gatewayListeners = listenerStore{byKey: make(map[string][]gatewayv1.Listener)}
+
+func (ls *listenerStore) write(key string, listeners []gatewayv1.Listener) {
+	ls.Lock()
+	defer ls.Unlock()
+	ls.byKey[key] = listeners
+}
+
+func (ls *listenerStore) forget(key string) {
+	ls.Lock()
+	defer ls.Unlock()
+	delete(ls.byKey, key)
+}
+
+func (ls *listenerStore) get(key string) []gatewayv1.Listener {
+	ls.RLock()
+	defer ls.RUnlock()
+	return ls.byKey[key]
+}
+
+// httpRoutes is the store of the HTTPRoute informer, so a changed Gateway can
+// re-check the routes attached to it. Set before the Gateway informer starts.
+var httpRoutes cache.Store
+
+// terminatesTLS reports whether the listener ends TLS, which makes the routes
+// behind it reachable over https://. "TLS" protocol listeners pass TLS through to
+// a TLSRoute instead and never serve an HTTPRoute.
+func terminatesTLS(listener gatewayv1.Listener) bool {
+	return listener.Protocol == gatewayv1.HTTPSProtocolType &&
+		(listener.TLS == nil || listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayv1.TLSModeTerminate)
+}
+
+// listenerServesHost reports whether the listener answers for a route hostname: a
+// listener without hostname answers for every one, a "*." prefix is a suffix match.
+func listenerServesHost(listener gatewayv1.Listener, host string) bool {
+	if listener.Hostname == nil || *listener.Hostname == "" {
+		return true
 	}
-	// shortcut: CasaVue never reads Gateway listeners, so listener TLS is unknown
-	// and links default to http://. Upgrade by resolving Spec.ParentRefs.
-	return buildEntry(it, host, "http://")
+	hostname := string(*listener.Hostname)
+	if strings.HasPrefix(hostname, "*.") {
+		return strings.HasSuffix(host, hostname[1:])
+	}
+	return hostname == host
+}
+
+// routeListeners are the listeners of the Gateways a route attaches to. A parentRef
+// naming no listener means every listener of that Gateway.
+func routeListeners(route *gatewayv1.HTTPRoute) []gatewayv1.Listener {
+	var listeners []gatewayv1.Listener
+	for _, ref := range route.Spec.ParentRefs {
+		if ref.Kind != nil && *ref.Kind != "Gateway" {
+			continue
+		}
+		namespace := route.Namespace
+		if ref.Namespace != nil {
+			namespace = string(*ref.Namespace)
+		}
+		for _, listener := range gatewayListeners.get(namespace + "/" + string(ref.Name)) {
+			if ref.SectionName == nil || listener.Name == *ref.SectionName {
+				listeners = append(listeners, listener)
+			}
+		}
+	}
+	return listeners
+}
+
+// routeHostAndProtocol decides which hostname of a route to link to and how. A route
+// is served only by the listeners of its Gateways and only with the hostnames those
+// listeners serve, so a hostname none of them serves cannot be reached at all. Prefer
+// a hostname served over TLS, then one served plainly, and finally, when no Gateway
+// is known or none of the hostnames matches, the first hostname with the http://
+// fallback. shortcut: the listener port is ignored, a route served on https only on a
+// non standard port gets a portless link; upgrade by adding the port to the URL.
+func routeHostAndProtocol(route *gatewayv1.HTTPRoute) (host, protocol string) {
+	protocol = "http://"
+	if len(route.Spec.Hostnames) == 0 {
+		return
+	}
+	listeners := routeListeners(route)
+	if len(listeners) == 0 {
+		return string(route.Spec.Hostnames[0]), protocol
+	}
+	for _, wantTLS := range []bool{true, false} {
+		for _, hostname := range route.Spec.Hostnames {
+			for _, listener := range listeners {
+				if listenerServesHost(listener, string(hostname)) &&
+					terminatesTLS(listener) == wantTLS {
+					if wantTLS {
+						protocol = "https://"
+					}
+					return string(hostname), protocol
+				}
+			}
+		}
+	}
+	return string(route.Spec.Hostnames[0]), protocol
+}
+
+// refreshRouteTLS re-checks the items of every known HTTPRoute after a Gateway
+// appeared, changed or was deleted - that is when it becomes known that a route is
+// served over TLS, or stops being served that way. Items whose link does not change
+// are left alone, so the usual Gateway status churn costs nothing.
+func refreshRouteTLS() {
+	for _, obj := range httpRoutes.List() {
+		route, ok := obj.(*gatewayv1.HTTPRoute)
+		if !ok {
+			continue
+		}
+		key := storeKey(route)
+		oldEntry, _, found := dashboardItems.read(key)
+		if !found {
+			continue
+		}
+		newEntry, ok := dashEntryFromHTTPRoute(route)
+		if !ok || newEntry.URL == oldEntry.URL {
+			continue
+		}
+		log.Info("Dashboard item updated (Gateway TLS): ", key, " ", oldEntry.URL, " -> ", newEntry.URL)
+		dashboardItems.write(key, newEntry)
+		go crawlItem(key)
+	}
+}
+
+func gatewayTLSEventHandlers() cache.ResourceEventHandlerFuncs {
+	remember := func(obj interface{}) {
+		if gw, ok := obj.(*gatewayv1.Gateway); ok {
+			gatewayListeners.write(storeKey(gw), gw.Spec.Listeners)
+		}
+		refreshRouteTLS()
+	}
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc:    remember,
+		UpdateFunc: func(_, newObj interface{}) { remember(newObj) },
+		DeleteFunc: func(obj interface{}) {
+			if tomb, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+				gatewayListeners.forget(tomb.Key)
+			} else if gw, ok := obj.(*gatewayv1.Gateway); ok {
+				gatewayListeners.forget(storeKey(gw))
+			}
+			refreshRouteTLS()
+		},
+	}
 }
 
 // filteredOut reports whether a cluster object must not be shown on the dashboard.
@@ -266,11 +415,13 @@ func getAndWatchKubernetesGatewayRoutes(kconfig *rest.Config) {
 		log.Info("Could not query for server resources in gateway.networking.k8s.io/v1, skipping Gateway API watch: ", err)
 		return
 	}
-	httpRouteSupported := false
+	httpRouteSupported, gatewaySupported := false, false
 	for _, resource := range resources.APIResources {
-		if resource.Name == "httproutes" && resource.Kind == "HTTPRoute" {
+		switch {
+		case resource.Name == "httproutes" && resource.Kind == "HTTPRoute":
 			httpRouteSupported = true
-			break
+		case resource.Name == "gateways" && resource.Kind == "Gateway":
+			gatewaySupported = true
 		}
 	}
 	if !httpRouteSupported {
@@ -279,12 +430,29 @@ func getAndWatchKubernetesGatewayRoutes(kconfig *rest.Config) {
 	}
 
 	watchlist := cache.NewListWatchFromClient(clientset.GatewayV1().RESTClient(), "httproutes", metav1.NamespaceAll, fields.Everything())
-	_, controller := cache.NewInformer(
+	routeStore, controller := cache.NewInformer(
 		watchlist,
 		&gatewayv1.HTTPRoute{},
 		time.Second*0,
 		dashEntryEventHandlers(dashEntryFromHTTPRoute),
 	)
+	httpRoutes = routeStore
+
+	// Gateways are only watched to learn which listeners terminate TLS. Not waited
+	// for: without Gateways (missing resource or RBAC) the routes are still shown,
+	// with the http:// fallback, instead of not at all.
+	if gatewaySupported {
+		gatewayWatchlist := cache.NewListWatchFromClient(clientset.GatewayV1().RESTClient(), "gateways", metav1.NamespaceAll, fields.Everything())
+		_, gatewayController := cache.NewInformer(
+			gatewayWatchlist,
+			&gatewayv1.Gateway{},
+			time.Second*0,
+			gatewayTLSEventHandlers(),
+		)
+		go gatewayController.Run(make(chan struct{}))
+	} else {
+		log.Info("Gateway resource not available on the cluster, HTTPRoute links cannot detect TLS.")
+	}
 
 	// blocks for the lifetime of the process, the function already runs in its own goroutine
 	controller.Run(make(chan struct{}))

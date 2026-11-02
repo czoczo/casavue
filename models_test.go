@@ -2,9 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"sync"
 	"testing"
 )
+
+// TestMain initialises what main() initialises, so that tests can call the code
+// around it without hitting the nil maps and the nil flag.
+func TestMain(m *testing.M) {
+	dashboardItems.items = make(map[string]DashEntry)
+	dashboardItems.versions = make(map[string]int64)
+	staticMode = new(bool)
+
+	os.Exit(m.Run())
+}
 
 func newTestStore() *DashboardItemsStore {
 	return &DashboardItemsStore{
