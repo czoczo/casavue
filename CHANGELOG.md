@@ -18,6 +18,8 @@
   - Fixed static mode saving an error page or a truncated file as an icon; the original icon URL is kept when the download fails.
   - Fixed `casavue.app/enable=false` not hiding an item in `ingressAnnotation` mode.
   - Icons are picked from every icon a site announces (HTML `<link>`, manifest, well-known paths, social cards) plus the dashboard-icons pack, each downloaded and scored by its real format and dimensions, instead of a fixed order of lookups. The site HTML is fetched once per crawl.
+  - Fixed icons which the crawling found but the browser never showed: the dashboard now loads every icon through CasaVue (`/icons/`) instead of from the application itself. Zot answers `Cross-Origin-Resource-Policy: same-origin` and the qBittorrent WebUI answers 401 to any request with the `Referer` of another site, so their pictures were refused in the browser; icons of `http://` items are no longer dropped as mixed content by an `https://` dashboard.
+  - A vector icon is preferred over the raster icons of a page even when its file name does not end in `.svg` and only the `type` attribute of the link or of the manifest entry says it is one.
   - Icon size attributes like `32x32` are read as 32 instead of 3232, so the largest icon of a site is picked correctly.
   - Customization values containing `$` (title, app name) no longer break the generated `index.html`.
   - Generated avatars are cached by the browser for a day instead of being generated again on every view.

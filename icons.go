@@ -209,7 +209,7 @@ func (page *sitePage) link(node *html.Node) {
 	default:
 		return
 	}
-	page.add(attr(node, "href"), attr(node, "sizes"), source)
+	page.add(attr(node, "href"), attr(node, "sizes"), attr(node, "type"), source)
 }
 
 func (page *sitePage) meta(node *html.Node) {
@@ -217,10 +217,10 @@ func (page *sitePage) meta(node *html.Node) {
 	if !strings.Contains(name, "og:image") && !strings.Contains(name, "twitter:image") && !strings.Contains(name, "tileimage") {
 		return
 	}
-	page.add(attr(node, "content"), "", fromMetaImage)
+	page.add(attr(node, "content"), "", "", fromMetaImage)
 }
 
-func (page *sitePage) add(href, sizes string, source int) {
+func (page *sitePage) add(href, sizes, mimeType string, source int) {
 	if data, ok := inlineData(href); ok {
 		kind, _, _, valid := imageKind(data)
 		if valid {
@@ -235,7 +235,7 @@ func (page *sitePage) add(href, sizes string, source int) {
 	page.candidates = append(page.candidates, iconCandidate{
 		url:    target,
 		size:   announcedSize(sizes, target),
-		kind:   kindHint(target),
+		kind:   iconKind(target, mimeType),
 		source: source,
 	})
 }
@@ -255,6 +255,7 @@ func manifestIcons(manifestURL string) []iconCandidate {
 		Icons []struct {
 			Src   string `json:"src"`
 			Sizes string `json:"sizes"`
+			Type  string `json:"type"`
 		} `json:"icons"`
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(data), &manifest); err != nil {
@@ -274,7 +275,7 @@ func manifestIcons(manifestURL string) []iconCandidate {
 		candidates = append(candidates, iconCandidate{
 			url:    target,
 			size:   announcedSize(icon.Sizes, target),
-			kind:   kindHint(target),
+			kind:   iconKind(target, icon.Type),
 			source: fromManifest,
 		})
 	}
@@ -655,6 +656,83 @@ func downloadIcon(iconURL string) string {
 	return saveIcon(icon)
 }
 
+// isRemoteIcon tells an icon the browser has to fetch from another host from a
+// file or avatar served by CasaVue itself.
+func isRemoteIcon(iconURL string) bool {
+	return strings.HasPrefix(strings.ToLower(iconURL), "http")
+}
+
+// iconProxyURL is where this server serves the icon of one dashboard item from,
+// so that the dashboard loads all its pictures from one host.
+func iconProxyURL(key string) string {
+	return "/icons/?item=" + url.QueryEscape(key)
+}
+
+// proxiedIcons replaces the icon addresses of the items an API response is
+// built for, so that the browser asks this server for the picture and not the
+// application the item points at. Those hosts refuse a picture loaded by a
+// foreign page: Zot answers with Cross-Origin-Resource-Policy: same-origin, the
+// qBittorrent WebUI answers 401 to any request carrying the Referer of another
+// site, and an http:// icon is dropped as mixed content by an https://
+// dashboard.
+func proxiedIcons(items map[string]DashEntry) map[string]DashEntry {
+	for key, item := range items {
+		if isRemoteIcon(item.IconURL) {
+			item.IconURL = iconProxyURL(key)
+			items[key] = item
+		}
+	}
+	return items
+}
+
+// iconProxyHandler answers with the icon of one dashboard item, fetched by this
+// server, which is not sent the Referer or the Origin a browser would send.
+// Only items already on the dashboard are answered, so the endpoint cannot be
+// used to reach arbitrary hosts.
+func iconProxyHandler(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Query().Get("item")
+	item, _, found := dashboardItems.read(key)
+	if !found || !isRemoteIcon(item.IconURL) {
+		http.Error(w, "unknown dashboard item", http.StatusNotFound)
+		return
+	}
+
+	data, finalURL, statusCode, err := getLimited(item.IconURL, maxIconBytes, iconRequestTimeout)
+	if err != nil || statusCode != http.StatusOK {
+		log.Warn("Icon request to ", item.IconURL, " ended with status ", statusCode, ": ", err)
+		http.Error(w, "icon unavailable", http.StatusNotFound)
+		return
+	}
+	kind, _, _, ok := imageKind(data)
+	if !ok {
+		log.Warn("Icon ", finalURL, " is not a picture")
+		http.Error(w, "not a picture", http.StatusNotFound)
+		return
+	}
+
+	// the bytes come from another host, so they must never run as a document of this one
+	w.Header().Set("Content-Security-Policy", "default-src 'none'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// shortcut: the address of a proxied icon does not change with the icon, so a
+	// replaced icon is served only after this cache expires
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Content-Type", contentTypeFor(kind))
+	w.Write(data)
+}
+
+// contentTypeFor names the format of the verified bytes for the browser.
+func contentTypeFor(kind string) string {
+	switch kind {
+	case "svg":
+		return "image/svg+xml"
+	case "ico":
+		return "image/vnd.microsoft.icon"
+	case "jpeg", "png", "gif", "webp", "avif", "bmp":
+		return "image/" + kind
+	}
+	return "application/octet-stream"
+}
+
 // id identifies where the icon came from, for icons inlined by a data: URI the
 // bytes are all there is.
 func (icon *verifiedIcon) id() string {
@@ -682,6 +760,21 @@ func announcedSize(sizes, iconURL string) int {
 		return size
 	}
 	return getSizeFromString(iconURL)
+}
+
+// iconKind is the format a page announces for an icon: the file name first,
+// then the `type` attribute of the link or of the manifest entry, which is all
+// there is for an icon without a telling file name. It only orders the
+// candidates, the bytes of the picture decide what an icon really is.
+func iconKind(iconURL, mimeType string) string {
+	if kind := kindHint(iconURL); kind != "" {
+		return kind
+	}
+	// a vector is the icon to want, so it must not stay of an unknown kind
+	if strings.Contains(strings.ToLower(mimeType), "svg") {
+		return "svg"
+	}
+	return ""
 }
 
 // kindHint guesses the format of an icon from its file name. It only orders

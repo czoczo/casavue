@@ -168,6 +168,128 @@ func TestSaveIconFile(t *testing.T) {
 	t.Cleanup(func() { os.Remove(compiledVuePath + "/" + saved) })
 }
 
+// A browser loads the icons of the dashboard as pictures of another site, and
+// many applications refuse those: the qBittorrent WebUI answers 401 to a request
+// carrying the Referer of a foreign page. The dashboard has to be served the
+// icons by CasaVue, which is not sending a Referer nor an Origin.
+func TestIconProxyServesTheIconOfADashboardItem(t *testing.T) {
+	initHttpClient(false)
+
+	served := map[string]bool{}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Referer() != "" || r.Header.Get("Origin") != "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/svg":
+			served["svg"] = true
+			w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>`))
+		case "/broken":
+			w.Write([]byte("not a picture at all"))
+		case "/logo":
+			w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	dashboardItems = DashboardItemsStore{
+		items: map[string]DashEntry{
+			"media/qbittorrent": {Namespace: "media", Name: "qbittorrent", IconURL: upstream.URL + "/svg"},
+			"media/broken":      {Namespace: "media", Name: "broken", IconURL: upstream.URL + "/broken"},
+			"media/missing":     {Namespace: "media", Name: "missing", IconURL: upstream.URL + "/nothing-here"},
+			"media/local":       {Namespace: "media", Name: "local", IconURL: "/avatars/media/local"},
+			"media/anonymous":   {Namespace: "media", Name: "anonymous", IconURL: upstream.URL + "/logo?v=1"},
+		},
+		versions: map[string]int64{"media/qbittorrent": 1},
+	}
+
+	for _, tc := range []struct {
+		key         string
+		status      int
+		contentType string
+	}{
+		{"media/qbittorrent", http.StatusOK, "image/svg+xml"},
+		{"media/broken", http.StatusNotFound, ""},
+		{"media/missing", http.StatusNotFound, ""},
+		{"media/local", http.StatusNotFound, ""},
+		{"other/not-an-item", http.StatusNotFound, ""},
+		// a name without a telling file name, announced as a vector by the page
+		{"media/anonymous", http.StatusOK, "image/svg+xml"},
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, iconProxyURL(tc.key), nil)
+		request.Header.Set("Referer", "https://dashboard.example.com/")
+		request.Header.Set("Origin", "https://dashboard.example.com")
+		iconProxyHandler(recorder, request)
+
+		if recorder.Code != tc.status {
+			t.Errorf("item %q: got status %d, expected %d", tc.key, recorder.Code, tc.status)
+		}
+		if ct := recorder.Header().Get("Content-Type"); tc.status == http.StatusOK && ct != tc.contentType {
+			t.Errorf("item %q: content type %q, expected %q", tc.key, ct, tc.contentType)
+		}
+	}
+	if !served["svg"] {
+		t.Error("the icon of the item was not fetched from its own host")
+	}
+
+	// an SVG is served as a picture only, never as a document of this server
+	recorder := httptest.NewRecorder()
+	iconProxyHandler(recorder, httptest.NewRequest(http.MethodGet, iconProxyURL("media/qbittorrent"), nil))
+	if csp := recorder.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src") {
+		t.Errorf("served SVG without a content security policy: %q", csp)
+	}
+}
+
+func TestProxiedIconsKeepsLocalIconAddresses(t *testing.T) {
+	items := proxiedIcons(map[string]DashEntry{
+		"media/qbittorrent": {IconURL: "https://qbittorrent.example.com/images/icon.svg"},
+		"media/casavue":     {IconURL: "/avatars/media/casavue"},
+		"searching/Google":  {IconURL: "http://www.google.com/favicon.ico"},
+	})
+	if items["media/qbittorrent"].IconURL != iconProxyURL("media/qbittorrent") {
+		t.Errorf("remote icon not proxied: %q", items["media/qbittorrent"].IconURL)
+	}
+	if items["searching/Google"].IconURL != iconProxyURL("searching/Google") {
+		t.Errorf("http icon not proxied: %q", items["searching/Google"].IconURL)
+	}
+	if items["media/casavue"].IconURL != "/avatars/media/casavue" {
+		t.Errorf("own icon changed: %q", items["media/casavue"].IconURL)
+	}
+}
+
+// A vector is the icon to want from a page, whatever the page announces next to
+// it and whatever the file name of the vector is called.
+func TestVectorIconWinsOverAnnouncedRasterOnes(t *testing.T) {
+	initHttpClient(false)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.Write([]byte(`<html><head><title>Some App</title>
+			<link rel="icon" type="image/png" sizes="32x32" href="images/app32.png">
+			<link rel="icon" type="image/png" sizes="512x512" href="/big.png">
+			<link rel="icon" type="image/svg+xml" href="/logo?v=1">
+			</head><body>x</body></html>`))
+		case "/logo":
+			w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>`))
+		default:
+			w.Write(testPNG(t, 512))
+		}
+	}))
+	defer server.Close()
+
+	iconURL, icon := findIcon(&DashEntry{Name: "app"}, fetchSite(server.URL))
+	if icon == nil {
+		t.Fatal("no icon found")
+	}
+	if icon.kind != "svg" || iconURL != server.URL+"/logo?v=1" {
+		t.Errorf("got %s (%d px) from %s", icon.kind, icon.size, iconURL)
+	}
+}
+
 func mustParse(t *testing.T, raw string) *url.URL {
 	t.Helper()
 	parsed, err := url.Parse(raw)
