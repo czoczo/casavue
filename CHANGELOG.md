@@ -23,6 +23,8 @@
   - Icon size attributes like `32x32` are read as 32 instead of 3232, so the largest icon of a site is picked correctly.
   - Customization values containing `$` (title, app name) no longer break the generated `index.html`.
   - Generated avatars are cached by the browser for a day instead of being generated again on every view.
+  - Configuration is reloaded when `main.yaml` or `items.yaml` change, so a new ConfigMap applied to Kubernetes is used without restarting CasaVue: static items are added, changed and removed, the content filters are re-applied to the already known Ingresses and HTTPRoutes, and a changed name or theme color is regenerated into the served files. A `main.yaml` CasaVue could not work with (unparsable YAML, unknown filter mode, invalid log level, invalid theme color) is refused with an error and the configuration in use is kept.
+  - A read-only configuration volume (a mounted ConfigMap) no longer ends the process: a configuration file it does not provide is replaced by the defaults built into the binary.
   - Removed unused dependency `PerformLine/go-stockutil`; 6 modules less in `go.mod` and in image scans.
   - Removed dependency `go.deanishe.net/favicon`; 5 modules less in `go.mod` and in image scans.
 - WebUI:

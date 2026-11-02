@@ -44,27 +44,24 @@ spec:
               path: /
               port: http
           volumeMounts:
-          {{- if .Values.config.main }}
-          - mountPath: /app/config/main.yaml
-            subPath: main.yaml
-            name: casavue-cfg-main
-          {{- end }}
-          - mountPath: /app/config/items.yaml
-            subPath: items.yaml
-            name: casavue-cfg-items
+          # the whole configuration directory: the kubelet updates the files of a
+          # ConfigMap volume in place, which it never does for a subPath mount
+          - mountPath: /app/config
+            name: casavue-cfg
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        {{- if .Values.config.main }}
-        - name: casavue-cfg-main
-          configMap:
-            defaultMode: 420
-            name: casavue-cfg-main
-        {{- end }}
-        - name: casavue-cfg-items
-          configMap:
-            defaultMode: 420
-            name: casavue-cfg-items
+        # both configuration ConfigMaps in one directory. config.main is not set by
+        # default, so its ConfigMap does not have to exist; when it is created later,
+        # the kubelet adds its file
+        - name: casavue-cfg
+          projected:
+            sources:
+              - configMap:
+                  name: casavue-cfg-main
+                  optional: true
+              - configMap:
+                  name: casavue-cfg-items
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -86,11 +86,13 @@ type verifiedIcon struct {
 	size int // longest side in px, 0 for SVG and formats Go cannot read
 }
 
-func initHttpClient(tlsSkipVerify bool) {
+// newHttpClient builds the HTTP client of a configuration. A configuration reload
+// replaces the live client, so it is used through liveHttpClient().
+func newHttpClient(tlsSkipVerify bool) *http.Client {
 	if tlsSkipVerify {
 		log.Warn("Disabling TLS checks")
 	}
-	httpClient = &http.Client{
+	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkipVerify},
 		},
@@ -113,7 +115,7 @@ func getLimited(requestURL string, limit int64, timeout time.Duration) (data []b
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; CasaVue)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,image/*,*/*;q=0.8")
 
-	resp, err := httpClient.Do(req)
+	resp, err := liveHttpClient().Do(req)
 	if err != nil {
 		return nil, "", 0, err
 	}

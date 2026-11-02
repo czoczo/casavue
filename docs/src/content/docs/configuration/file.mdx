@@ -15,6 +15,12 @@ Despite editing configuration differs depending on deployment method ([Helm Char
 
 Below is an example of their contents with a description of the fields.
 
+## Applying configuration changes
+
+CasaVue looks at `main.yaml` and `items.yaml` every 5 seconds and applies a change without restarting: static entries are added, updated and removed, the content filters are applied to the items already found in Kubernetes, and a new name or theme color is regenerated into the served files. On Kubernetes it is enough to `kubectl apply` or `helm upgrade` the ConfigMaps; the kubelet needs its own sync period (up to a minute) to update the files inside the pod.
+
+A `main.yaml` CasaVue could not work with (unparsable YAML, unknown filter mode, invalid log level, invalid theme color) is not applied at all: the configuration in use stays and the error is logged.
+
 ## Main configuration file
 If you want to modify CasaVue apperance, modyfing default main config file should be enough.
 

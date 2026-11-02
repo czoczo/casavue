@@ -16,9 +16,13 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
+// the configuration files, variables so that a test can point them at its own files
+var (
+	configFilePath = "./config/main.yaml"
+	itemsFilePath  = "./config/items.yaml"
+)
+
 const (
-	configFilePath        = "./config/main.yaml"
-	itemsFilePath         = "./config/items.yaml"
 	staticFilesPath       = "./frontend"
 	generatedAvatarsPath  = "./avatars"
 	downloadedAvatarsPath = "./downloadedAvatars"
@@ -31,7 +35,6 @@ const (
 var version string
 
 var config Config
-var staticItems StaticItems
 var staticMode *bool
 var wg sync.WaitGroup
 var httpClient *http.Client
@@ -67,6 +70,10 @@ func main() {
 	if *staticMode {
 		return
 	}
+
+	// a new ConfigMap of the main config or of the items is applied without restarting
+	// the pod
+	go watchConfigFiles()
 
 	// kubernetes.go
 	// without any Kubernetes access the items of the config files are still

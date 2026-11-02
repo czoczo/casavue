@@ -2,6 +2,9 @@
 
 [ [Application Changelog](../../CHANGELOG.md) ] | [ Helm Chart Changelog ]
 
+## 0.1.7
+- Both configuration ConfigMaps are mounted as one directory (`projected` volume) instead of two single file `subPath` mounts. A `subPath` mount is never updated by the kubelet, so CasaVue could never notice a `helm upgrade`; with the directory mount its configuration reload picks the new ConfigMap up without restarting the pod.
+
 ## 0.1.4
 - App version bump to 0.1.2.
 

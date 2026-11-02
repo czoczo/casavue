@@ -109,7 +109,7 @@ func TestResolveURL(t *testing.T) {
 // us the whole one, and the icon of a manifest has to win over the banner
 // picture of social media.
 func TestBestIconOfAPage(t *testing.T) {
-	initHttpClient(false)
+	httpClient = newHttpClient(false)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":
@@ -173,7 +173,7 @@ func TestSaveIconFile(t *testing.T) {
 // carrying the Referer of a foreign page. The dashboard has to be served the
 // icons by CasaVue, which is not sending a Referer nor an Origin.
 func TestIconProxyServesTheIconOfADashboardItem(t *testing.T) {
-	initHttpClient(false)
+	httpClient = newHttpClient(false)
 
 	served := map[string]bool{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +264,7 @@ func TestProxiedIconsKeepsLocalIconAddresses(t *testing.T) {
 // A vector is the icon to want from a page, whatever the page announces next to
 // it and whatever the file name of the vector is called.
 func TestVectorIconWinsOverAnnouncedRasterOnes(t *testing.T) {
-	initHttpClient(false)
+	httpClient = newHttpClient(false)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":

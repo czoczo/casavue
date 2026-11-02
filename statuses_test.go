@@ -9,7 +9,7 @@ import (
 // The endpoint used to fetch whatever URL was put into the query, which turned
 // the dashboard into an open proxy for whoever could reach it.
 func TestStatusCheckAcceptsOnlyDashboardItems(t *testing.T) {
-	initHttpClient(false)
+	httpClient = newHttpClient(false)
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer upstream.Close()

@@ -44,8 +44,8 @@ To change CasaVue configuration:
    helm upgrade my-release -f values.yaml
    ```
  </Steps>
-:::caution[Accessing application]
-CasaVue pod needs manual restart to read configuration changes.
+:::note[Configuration applied automatically]
+No pod restart needed: CasaVue reads its configuration files again whenever they change. The kubelet first has to propagate the ConfigMap into the pod (up to a minute of its own sync period), CasaVue applies the new files within the next 5 seconds.
 :::
 
 ### Uninstalling the Chart

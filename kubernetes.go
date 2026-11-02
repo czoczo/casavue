@@ -163,6 +163,76 @@ func (ls *listenerStore) get(key string) []gatewayv1.Listener {
 // re-check the routes attached to it. Set before the Gateway informer starts.
 var httpRoutes cache.Store
 
+// clusterObjectStore is what an informer store is used for here: the objects it
+// happens to hold.
+type clusterObjectStore interface {
+	List() []interface{}
+}
+
+// watchedInformer is one running informer: its store of cluster objects and the
+// conversion of those objects into dashboard entries.
+type watchedInformer struct {
+	store     clusterObjectStore
+	entryFunc func(interface{}) (DashEntry, bool)
+}
+
+// informerStores are the running informers, registered by the informer goroutines as
+// they start and read by a configuration reload.
+type informerStores struct {
+	sync.Mutex
+	stores []watchedInformer
+}
+
+var watchedStores informerStores
+
+func (ws *informerStores) add(store clusterObjectStore, entryFunc func(interface{}) (DashEntry, bool)) {
+	ws.Lock()
+	defer ws.Unlock()
+	ws.stores = append(ws.stores, watchedInformer{store: store, entryFunc: entryFunc})
+}
+
+func (ws *informerStores) all() []watchedInformer {
+	ws.Lock()
+	defer ws.Unlock()
+	result := make([]watchedInformer, len(ws.stores))
+	copy(result, ws.stores)
+	return result
+}
+
+// applyWatchedObjects applies the content filters of the current configuration to
+// every watched cluster object, so a configuration change is applied at once and not
+// only with the next event of a cluster object. shortcut: an item already on the
+// dashboard keeps its entry, a cluster object changing in a way which matters for it
+// is taken care of by its own informer event.
+func applyWatchedObjects() {
+	for _, watched := range watchedStores.all() {
+		for _, obj := range watched.store.List() {
+			meta, ok := obj.(metav1.Object)
+			if !ok {
+				continue
+			}
+			key := storeKey(meta)
+			if filteredOut(meta) {
+				if _, _, found := dashboardItems.read(key); found {
+					log.Info("Dashboard item hidden (configuration change): ", key)
+					dashboardItems.delete(key)
+				}
+				continue
+			}
+			if _, _, found := dashboardItems.read(key); found {
+				continue
+			}
+			entry, ok := watched.entryFunc(obj)
+			if !ok {
+				continue
+			}
+			log.Info("Dashboard item added (configuration change): ", key)
+			dashboardItems.write(key, entry)
+			go crawlItem(key)
+		}
+	}
+}
+
 // terminatesTLS reports whether the listener ends TLS, which makes the routes
 // behind it reachable over https://. "TLS" protocol listeners pass TLS through to
 // a TLSRoute instead and never serve an HTTPRoute.
@@ -285,11 +355,12 @@ func gatewayTLSEventHandlers() cache.ResourceEventHandlerFuncs {
 
 // filteredOut reports whether a cluster object must not be shown on the dashboard.
 func filteredOut(obj metav1.Object) bool {
-	if applyFilter(config.Content_filters.Namespace.Pattern, config.Content_filters.Namespace.Mode, obj.GetNamespace()) {
+	filters := contentFilters()
+	if applyFilter(filters.Namespace.Pattern, filters.Namespace.Mode, obj.GetNamespace()) {
 		log.Debug("Skipping namespace '" + obj.GetNamespace() + "' due to pattern")
 		return true
 	}
-	if applyFilter(config.Content_filters.Item.Pattern, config.Content_filters.Item.Mode, obj.GetName()) {
+	if applyFilter(filters.Item.Pattern, filters.Item.Mode, obj.GetName()) {
 		log.Debug("Skipping item '" + obj.GetName() + "' due to pattern")
 		return true
 	}
@@ -297,7 +368,7 @@ func filteredOut(obj metav1.Object) bool {
 		log.Debug("Skipping self: ", obj.GetName())
 		return true
 	}
-	if config.Content_filters.Item.Mode == "ingressAnnotation" && !enabledByAnnotation(obj.GetAnnotations()) {
+	if filters.Item.Mode == "ingressAnnotation" && !enabledByAnnotation(obj.GetAnnotations()) {
 		log.Debug("Skipping item '" + obj.GetName() + "' due to Ingress Annotation mode and no enabled annotation.")
 		return true
 	}
@@ -389,12 +460,13 @@ func getAndWatchKubernetesIngressItems(kconfig *rest.Config) {
 	}
 
 	watchlist := cache.NewListWatchFromClient(clientset.NetworkingV1().RESTClient(), "ingresses", metav1.NamespaceAll, fields.Everything())
-	_, controller := cache.NewInformer(
+	ingressStore, controller := cache.NewInformer(
 		watchlist,
 		&v1.Ingress{},
 		time.Second*0,
 		dashEntryEventHandlers(dashEntryFromIngress),
 	)
+	watchedStores.add(ingressStore, dashEntryFromIngress)
 
 	// blocks for the lifetime of the process, the function already runs in its own goroutine
 	controller.Run(make(chan struct{}))
@@ -437,6 +509,7 @@ func getAndWatchKubernetesGatewayRoutes(kconfig *rest.Config) {
 		dashEntryEventHandlers(dashEntryFromHTTPRoute),
 	)
 	httpRoutes = routeStore
+	watchedStores.add(routeStore, dashEntryFromHTTPRoute)
 
 	// Gateways are only watched to learn which listeners terminate TLS. Not waited
 	// for: without Gateways (missing resource or RBAC) the routes are still shown,

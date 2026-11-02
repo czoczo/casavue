@@ -12,7 +12,7 @@ import (
 // and reports the final status code. Anything but 200 and 401 is an error.
 func checkUrlStatus(url string) (int, error) {
 	log.Debug("Checking URL ", url, " for status.")
-	resp, err := httpClient.Get(url)
+	resp, err := liveHttpClient().Get(url)
 	if err != nil {
 		return -1, err
 	}
