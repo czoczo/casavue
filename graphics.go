@@ -3,7 +3,7 @@
 package main
 
 import (
-	"bufio"
+	"encoding/base64"
 	"fmt"
 	ico "github.com/biessek/golang-ico"
 	"github.com/disintegration/imaging"
@@ -153,31 +153,67 @@ func getContrastColor(inputColor string) string {
 	return adjustedColor
 }
 
-func openSvgToString(svgPath string) (string, error) {
-	// Open SVG file
-	svgFile, err := os.Open(svgPath)
+// logoSvgColor is the fill color the shipped logo SVGs are drawn with; the icon
+// generation swaps it for the contrast color of the theme. An overriding logo has to
+// use it as well to get recolored.
+const logoSvgColor = "#000000"
+
+// logoSvg decodes an SVG logo override from the configuration. An empty override
+// means "nothing configured". The wrapped base64 which terminals and YAML block
+// scalars produce is accepted.
+func logoSvg(override string) (string, error) {
+	if strings.TrimSpace(override) == "" {
+		return "", nil
+	}
+	svg, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(override), ""))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("not valid base64: %w", err)
 	}
-	defer svgFile.Close()
-
-	// Read the SVG content
-	scanner := bufio.NewScanner(svgFile)
-	var svgContent string
-	for scanner.Scan() {
-		svgContent += scanner.Text() + "\n"
+	if !strings.Contains(string(svg), "<svg") {
+		return "", fmt.Errorf("decoded content is not an SVG document")
 	}
-
-	return svgContent, nil
+	return string(svg), nil
 }
 
-func convertSvgToFavicons(svgPath string) error {
-	svgContent, _ := openSvgToString(svgPath)
+func configuredLogoSvg(override string) string {
+	svg, err := logoSvg(override)
+	if err != nil {
+		log.Error("Ignoring logo override: ", err)
+	}
+	return svg
+}
 
-	// Replace 'fill="#e0f3ff"' with the value from config.Customization.Colors.Contrast
+func readSvgFile(svgPath string) string {
+	svg, err := os.ReadFile(svgPath)
+	if err != nil {
+		log.Error("Error reading ", svgPath, ": ", err)
+	}
+	return string(svg)
+}
+
+// logoSvgs returns the SVG content the PWA icons are generated from: a configured
+// base64 override if there is one, the SVG file of CasaVue elsewhere.
+func logoSvgs(customization Customization) (mainLogo string, smallLogo string) {
+	mainLogo = configuredLogoSvg(customization.Logo)
+	smallLogo = configuredLogoSvg(customization.LogoSmall)
+
+	// only the main logo overridden: the favicons are generated from it as well
+	if smallLogo == "" && mainLogo != "" {
+		smallLogo = mainLogo
+	}
+	if mainLogo == "" {
+		mainLogo = readSvgFile(sourceLogoPath)
+	}
+	if smallLogo == "" {
+		smallLogo = readSvgFile(sourceSmallLogoPath)
+	}
+	return mainLogo, smallLogo
+}
+
+func convertSvgToFavicons(svgContent string) error {
 	themeColor := config.Customization.Colors.Theme
 	contrastColor := getContrastColor(themeColor)
-	svgContent = strings.ReplaceAll(string(svgContent), `fill="#e0f3ff"`, fmt.Sprintf(`fill="%s"`, contrastColor))
+	svgContent = strings.ReplaceAll(svgContent, `fill="`+logoSvgColor+`"`, fmt.Sprintf(`fill="%s"`, contrastColor))
 
 	// Save the modified SVG content to a new file at 'dist/img/icons/safari-pinned-tab.svg'
 	err := ioutil.WriteFile(pwaIconsFolderPath+"/safari-pinned-tab.svg", []byte(svgContent), 0644)
@@ -208,11 +244,9 @@ func convertSvgToFavicons(svgPath string) error {
 	return nil
 }
 
-func convertSvgToPng(svgPath string, pngPath string, sideLength int) error {
-	svgContent, _ := openSvgToString(svgPath)
-
+func convertSvgToPng(svgContent string, pngPath string, sideLength int) error {
 	// Replace color occurrences
-	replacedContent := strings.Replace(svgContent, "#e0f3ff", getContrastColor(config.Customization.Colors.Theme), -1)
+	replacedContent := strings.Replace(svgContent, logoSvgColor, getContrastColor(config.Customization.Colors.Theme), -1)
 	img := svgToRaster(replacedContent, sideLength)
 
 	// Resize the image to add padding (15% of side length)

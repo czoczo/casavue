@@ -53,6 +53,8 @@ func TestUnusableConfigurationsAreRefused(t *testing.T) {
 		"invalid filter pattern": "content_filters:\n  item:\n    mode: \"exclude\"\n    pattern: \"[\"\n",
 		"unknown log level":      "logging:\n  level: \"everything\"\n",
 		"invalid theme color":    "customization:\n  colors:\n    theme: \"purple\"\n",
+		"logo not base64":        "customization:\n  logo: \"###\"\n",
+		"logo not an svg":        "customization:\n  logo_small: \"PGh0bWwvPg==\"\n", // <html/>
 	} {
 		if _, err := parseMainConfig([]byte(mainYAML)); err == nil {
 			t.Errorf("%s must be refused", name)

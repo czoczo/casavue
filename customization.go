@@ -159,7 +159,9 @@ func extractSize(path string) (int, error) {
 }
 
 func generatePWAIcons() {
-	convertSvgToFavicons(sourceSmallLogoPath)
+	mainLogo, smallLogo := logoSvgs(config.Customization)
+
+	convertSvgToFavicons(smallLogo)
 	paths, _ := listLogoFiles()
 	for _, path := range paths {
 		ext := filepath.Ext(path)
@@ -167,7 +169,7 @@ func generatePWAIcons() {
 			continue
 		}
 		size, _ := extractSize(path)
-		convertSvgToPng(sourceLogoPath, path, size)
+		convertSvgToPng(mainLogo, path, size)
 	}
 }
 

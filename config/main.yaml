@@ -6,6 +6,15 @@ customization:
   # influences page title and PWA name
   name: CasaVue
 
+  # Logo overrides as base64 encoded SVG documents, e.g. `base64 -w0 logo.svg`.
+  # The color "#000000" of the SVG is repainted with the theme contrast color, so an
+  # override should use it too. Overriding only "logo" also changes the favicons,
+  # which are then generated from the overriding logo.
+  # logo: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci...   # <svg ...>
+  #
+  # overrides only the small logo used for the favicons
+  # logo_small: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci...   # <svg ...>
+
   colors:
     # main color
     theme: "#deaded"
