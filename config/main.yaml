@@ -9,7 +9,10 @@ customization:
   # Logo overrides as base64 encoded SVG documents, e.g. `base64 -w0 logo.svg`.
   # The color "#000000" of the SVG is repainted with the theme contrast color, so an
   # override should use it too. Overriding only "logo" also changes the favicons,
-  # which are then generated from the overriding logo.
+  # which are then generated from the overriding logo, and "logo" replaces the logo in
+  # the header of the dashboard as well. An override is drawn 30% smaller than its
+  # viewBox before its icons are generated, because own SVGs usually fill the canvas
+  # edge to edge; an SVG without a viewBox keeps its size.
   # logo: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci...   # <svg ...>
   #
   # overrides only the small logo used for the favicons

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"image"
 	"image/color"
 	"strings"
 	"testing"
@@ -117,4 +118,46 @@ func TestLogoOverridesAreNotSentToFrontend(t *testing.T) {
 	if strings.Contains(string(frontendConfig), "logo") {
 		t.Errorf("logo override leaked into the frontend config: %s", frontendConfig)
 	}
+}
+
+// An overriding logo is reduced by 30% before its icons are generated out of it, the
+// logo of CasaVue is not.
+func TestShrinkLogoSvg(t *testing.T) {
+	for _, tc := range []struct{ name, svg, expected string }{
+		{"viewBox of the shipped logo", `<svg viewBox="0.00 0.00 637.00 637.00"><path/></svg>`, `<svg viewBox="0.00 0.00 637.00 637.00"><g transform="translate(95.55 95.55) scale(0.7 0.7)"><path/></g></svg>`},
+		{"origin not at zero", `<svg viewBox="10 20 100 50"><path/></svg>`, `<svg viewBox="10 20 100 50"><g transform="translate(18 13.5) scale(0.7 0.7)"><path/></g></svg>`},
+		{"comma separated", `<svg viewBox="0,0,100,100"><path/></svg>`, `<svg viewBox="0,0,100,100"><g transform="translate(15 15) scale(0.7 0.7)"><path/></g></svg>`},
+		{"no viewBox to keep the logo centered with", `<svg><path/></svg>`, `<svg><path/></svg>`},
+		{"viewBox which is not four numbers", `<svg viewBox="wide"><path/></svg>`, `<svg viewBox="wide"><path/></svg>`},
+		{"empty canvas", `<svg viewBox="0 0 0 0"><path/></svg>`, `<svg viewBox="0 0 0 0"><path/></svg>`},
+		{"self-closing root tag", `<svg viewBox="0 0 100 100"/>`, `<svg viewBox="0 0 100 100"/>`},
+	} {
+		if got := shrinkLogoSvg(tc.svg); got != tc.expected {
+			t.Errorf("%s: got %s, want %s", tc.name, got, tc.expected)
+		}
+	}
+
+	// the scaled group has to reach the rasterization too
+	mainLogo, shrunk := readSvgFile(sourceLogoPath), shrinkLogoSvg(readSvgFile(sourceLogoPath))
+	config.Customization.Colors.Theme = "#deaded"
+	full, reduced := drawnWidth(svgToRaster(mainLogo, 200)), drawnWidth(svgToRaster(shrunk, 200))
+	if ratio := float64(reduced) / float64(full); ratio < 0.63 || ratio > 0.77 {
+		t.Errorf("an overriding logo is not drawn 30 percent smaller: %d pixels instead of %d", reduced, full)
+	}
+}
+
+// drawnWidth is the width of what an image has drawn on the transparent background of
+// an SVG, measured on the dark logo of CasaVue.
+func drawnWidth(img image.Image) int {
+	side := img.Bounds().Dx()
+	first, last := side, -1
+	for x := 0; x < side; x++ {
+		for y := 0; y < side; y++ {
+			if r, _, _, _ := img.At(x, y).RGBA(); r < 6553 {
+				first, last = min(first, x), max(last, x)
+				break
+			}
+		}
+	}
+	return last - first + 1
 }

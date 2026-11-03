@@ -18,6 +18,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -175,6 +176,67 @@ func logoSvg(override string) (string, error) {
 	return string(svg), nil
 }
 
+// logoScale is how much of its own canvas an overriding logo keeps of it before the
+// icons are generated out of it: an own SVG usually fills the canvas edge to edge.
+const logoScale = 0.7
+
+var (
+	viewBoxRegex = regexp.MustCompile(`viewBox="([^"]*)"`)
+	svgTagRegex  = regexp.MustCompile(`(?s)<svg\b[^>]*>`)
+)
+
+// shrinkLogoSvg reduces an overriding logo by 30% before the icons are generated out
+// of it. Its content gets wrapped in one scaled <g> instead of the paths being
+// rewritten, so colors, gradients and the repainting of the icon generation keep
+// working. The viewBox is not used for the reduction either: an icon drawn in a
+// viewBox with a negative origin ends up off the canvas of the raster graphics.
+// shortcut: an SVG without a viewBox (or with a viewBox which is not four numbers)
+// keeps its size, as there is no canvas to keep the logo centered in; upgrade to
+// transforming the paths if such logos have to be reduced as well.
+func shrinkLogoSvg(svg string) string {
+	dims := viewBoxRegex.FindStringSubmatchIndex(svg)
+	if dims == nil {
+		return svg
+	}
+
+	canvas := make([]float64, 4)
+	numbers := strings.Fields(strings.ReplaceAll(svg[dims[2]:dims[3]], ",", " "))
+	if len(numbers) != 4 {
+		return svg
+	}
+	for idx, number := range numbers {
+		value, err := strconv.ParseFloat(number, 64)
+		if err != nil {
+			return svg
+		}
+		canvas[idx] = value
+	}
+	if canvas[2] <= 0 || canvas[3] <= 0 {
+		return svg
+	}
+
+	// the root tag has to stay outside the scaled group, so the background of the
+	// favicons is not scaled along with the logo
+	start := svgTagRegex.FindStringIndex(svg)
+	closing := strings.LastIndex(svg, "</svg>")
+	if start == nil || closing < start[1] {
+		return svg // a self-closing root tag: nothing to wrap
+	}
+
+	// the center of the canvas is the one point which stays where it is while scaling
+	scaled := fmt.Sprintf(`<g transform="translate(%v %v) scale(%v %v)">`,
+		svgNumber((canvas[0]+canvas[2]/2)*(1-logoScale)), svgNumber((canvas[1]+canvas[3]/2)*(1-logoScale)),
+		svgNumber(logoScale), svgNumber(logoScale))
+
+	return svg[:start[1]] + scaled + svg[start[1]:closing] + "</g>" + svg[closing:]
+}
+
+// svgNumber writes a value of a generated SVG without exponent and without trailing
+// zeros, so the SVG stays readable.
+func svgNumber(value float64) string {
+	return strconv.FormatFloat(roundToPlaces(value, 3), 'f', -1, 64)
+}
+
 func configuredLogoSvg(override string) string {
 	svg, err := logoSvg(override)
 	if err != nil {
@@ -192,10 +254,12 @@ func readSvgFile(svgPath string) string {
 }
 
 // logoSvgs returns the SVG content the PWA icons are generated from: a configured
-// base64 override if there is one, the SVG file of CasaVue elsewhere.
+// base64 override if there is one, the SVG file of CasaVue elsewhere. Only an
+// override gets reduced by 30% first, the logo of CasaVue keeps the size it always
+// had.
 func logoSvgs(customization Customization) (mainLogo string, smallLogo string) {
-	mainLogo = configuredLogoSvg(customization.Logo)
-	smallLogo = configuredLogoSvg(customization.LogoSmall)
+	mainLogo = shrinkLogoSvg(configuredLogoSvg(customization.Logo))
+	smallLogo = shrinkLogoSvg(configuredLogoSvg(customization.LogoSmall))
 
 	// only the main logo overridden: the favicons are generated from it as well
 	if smallLogo == "" && mainLogo != "" {
@@ -221,8 +285,11 @@ func convertSvgToFavicons(svgContent string) error {
 		return fmt.Errorf("error saving modified SVG: %v", err)
 	}
 
-	// Replace '<path' with '<rect width="100%" height="100%" fill="red"/>\n<path'
-	svgContent = strings.ReplaceAll(svgContent, `<path`, `<rect width="100%" height="100%" rx="80" ry="80" fill="`+themeColor+`"/>\n<path`)
+	// The background of the favicon goes right inside the root tag, so that it keeps
+	// covering the whole icon also for a logo which is scaled down in a <g>
+	if start := svgTagRegex.FindStringIndex(svgContent); start != nil {
+		svgContent = svgContent[:start[1]] + `<rect width="100%" height="100%" rx="80" ry="80" fill="` + themeColor + `"/>\n` + svgContent[start[1]:]
+	}
 
 	// Save the modified SVG content to a new file at 'dist/img/favicon.svg'
 	err = ioutil.WriteFile(pwaIconsFolderPath+"/favicon.svg", []byte(svgContent), 0644)

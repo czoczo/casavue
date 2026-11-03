@@ -1,6 +1,6 @@
 <template>
-    <!--<img src="@/assets/logo.svg"/>-->
-    <svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny" viewBox="0.00 0.00 637.00 555.00">
+    <div v-if="logo" v-html="logo"></div>
+    <svg v-else xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny" viewBox="0.00 0.00 637.00 555.00">
     <path fill="#07263c" d="
       M 314.84 0.00
       L 321.09 0.00
@@ -142,6 +142,22 @@
 </template>
 
 <script>
+export default {
+  data() {
+    return {
+      logo: '',
+    }
+  },
+  mounted() {
+    // CasaVue serves an overriding customization.logo next to index.html; without an
+    // override there is no such file and the shipped SVG above stays in place. ?t=
+    // keeps an override which was changed or removed out of the browser cache.
+    fetch(process.env.BASE_URL + 'logo.svg?t=' + Date.now())
+      .then((response) => (response.ok ? response.text() : ''))
+      .then((logo) => logo.includes('<svg') && (this.logo = logo))
+      .catch(() => {})
+  },
+}
 </script>
 
 <style>

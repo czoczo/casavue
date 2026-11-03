@@ -27,6 +27,8 @@ func updateFrontendFiles() {
 
 	generatePWAIcons()
 
+	writeOverriddenLogo(config.Customization)
+
 	// if static mode, copy files for docker volume share
 	if *staticMode {
 		err := cp.Copy(compiledVuePath, "./dist")
@@ -45,6 +47,27 @@ const (
 	indexHtmlPath       = compiledVuePath + "/index.html"
 	faviconPath         = compiledVuePath + "/favicon.ico"
 )
+
+// the SVG the logo of the dashboard header is drawn from; a variable so that a test
+// can point it at its own files
+var logoSvgPath = compiledVuePath + "/logo.svg"
+
+// writeOverriddenLogo serves an overriding customization.logo to the header of the
+// dashboard, which draws the logo of CasaVue itself as long as no such file is there.
+// The file is not reduced like the icons are: the header keeps its own padding.
+func writeOverriddenLogo(customization Customization) {
+	override := configuredLogoSvg(customization.Logo)
+	if override == "" {
+		// an override which is gone again, so the frontend has to draw its own logo
+		if err := os.Remove(logoSvgPath); err != nil && !os.IsNotExist(err) {
+			log.Error("Error removing ", logoSvgPath, ": ", err)
+		}
+		return
+	}
+	if err := atomicReplace(logoSvgPath, []byte(override)); err != nil {
+		log.Error("Error writing ", logoSvgPath, ": ", err)
+	}
+}
 
 type Manifest struct {
 	Name            string `json:"name"`
