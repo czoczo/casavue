@@ -49,7 +49,7 @@ func TestGetContrastColor(t *testing.T) {
 	}
 }
 
-// The base64 overrides of customization.logo and customization.logo_small.
+// The base64 override of customization.logo.
 func TestLogoSvg(t *testing.T) {
 	for _, override := range []string{
 		base64.StdEncoding.EncodeToString([]byte("<svg/>")),
@@ -76,9 +76,9 @@ func TestLogoSvg(t *testing.T) {
 	}
 }
 
-// Which logo the PWA icons are generated from: nothing configured, only the main
-// logo, only the small one. The shipped SVGs have to be repainted by the icon
-// generation, so their fill color is checked along the way.
+// Which logo the PWA icons are generated from: nothing configured, or an overriding
+// one. The shipped SVGs have to be repainted by the icon generation, so their fill
+// color is checked along the way.
 func TestLogoSvgs(t *testing.T) {
 	b64 := func(svg string) string { return base64.StdEncoding.EncodeToString([]byte(svg)) }
 
@@ -94,15 +94,7 @@ func TestLogoSvgs(t *testing.T) {
 
 	mainLogo, smallLogo = logoSvgs(Customization{Logo: b64("<svg>main</svg>")})
 	if mainLogo != "<svg>main</svg>" || smallLogo != "<svg>main</svg>" {
-		t.Errorf("favicons have to be generated from an overriding main logo: %q, %q", mainLogo, smallLogo)
-	}
-
-	mainLogo, smallLogo = logoSvgs(Customization{LogoSmall: b64("<svg>small</svg>")})
-	if smallLogo != "<svg>small</svg>" {
-		t.Errorf("logo_small override ignored: %q", smallLogo)
-	}
-	if mainLogo == smallLogo || mainLogo == "" {
-		t.Errorf("only logo_small is overridden, the main logo has to stay the shipped one: %q", mainLogo)
+		t.Errorf("favicons have to be generated from an overriding logo: %q, %q", mainLogo, smallLogo)
 	}
 }
 

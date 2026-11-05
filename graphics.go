@@ -253,25 +253,14 @@ func readSvgFile(svgPath string) string {
 	return string(svg)
 }
 
-// logoSvgs returns the SVG content the PWA icons are generated from: a configured
-// base64 override if there is one, the SVG file of CasaVue elsewhere. Only an
-// override gets reduced by 30% first, the logo of CasaVue keeps the size it always
-// had.
+// logoSvgs returns the SVG content the PWA icons are generated from: the configured
+// base64 override, reduced by 30%, which is then the source of every icon, or the
+// SVG files of CasaVue elsewhere - those keep the size they always had.
 func logoSvgs(customization Customization) (mainLogo string, smallLogo string) {
-	mainLogo = shrinkLogoSvg(configuredLogoSvg(customization.Logo))
-	smallLogo = shrinkLogoSvg(configuredLogoSvg(customization.LogoSmall))
-
-	// only the main logo overridden: the favicons are generated from it as well
-	if smallLogo == "" && mainLogo != "" {
-		smallLogo = mainLogo
+	if override := shrinkLogoSvg(configuredLogoSvg(customization.Logo)); override != "" {
+		return override, override
 	}
-	if mainLogo == "" {
-		mainLogo = readSvgFile(sourceLogoPath)
-	}
-	if smallLogo == "" {
-		smallLogo = readSvgFile(sourceSmallLogoPath)
-	}
-	return mainLogo, smallLogo
+	return readSvgFile(sourceLogoPath), readSvgFile(sourceSmallLogoPath)
 }
 
 func convertSvgToFavicons(svgContent string) error {

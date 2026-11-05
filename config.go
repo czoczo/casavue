@@ -30,10 +30,9 @@ const configReloadCheckInterval = 5 * time.Second
 
 type Customization struct {
 	Name string `json:"name"`
-	// base64 encoded SVGs replacing the logos of CasaVue, not passed to the frontend
-	Logo      string `json:"-" yaml:"logo"`
-	LogoSmall string `json:"-" yaml:"logo_small"`
-	Colors    struct {
+	// base64 encoded SVG replacing the logo of CasaVue, not passed to the frontend
+	Logo   string `json:"-" yaml:"logo"`
+	Colors struct {
 		Theme string `json:"theme"`
 		Items struct {
 			Saturation int `json:"saturation"`
@@ -179,13 +178,8 @@ func validateMainConfig(cfg Config) error {
 	if _, err := parseThemeColor(cfg.Customization.Colors.Theme); err != nil {
 		return err
 	}
-	for _, logo := range []struct{ name, override string }{
-		{"logo", cfg.Customization.Logo},
-		{"logo_small", cfg.Customization.LogoSmall},
-	} {
-		if _, err := logoSvg(logo.override); err != nil {
-			return fmt.Errorf("customization.%s: %w", logo.name, err)
-		}
+	if _, err := logoSvg(cfg.Customization.Logo); err != nil {
+		return fmt.Errorf("customization.logo: %w", err)
 	}
 	for _, filter := range []Filter{cfg.Content_filters.Namespace, cfg.Content_filters.Item} {
 		switch filter.Mode {

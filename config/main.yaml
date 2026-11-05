@@ -6,17 +6,13 @@ customization:
   # influences page title and PWA name
   name: CasaVue
 
-  # Logo overrides as base64 encoded SVG documents, e.g. `base64 -w0 logo.svg`.
-  # The color "#000000" of the SVG is repainted with the theme contrast color, so an
-  # override should use it too. Overriding only "logo" also changes the favicons,
-  # which are then generated from the overriding logo, and "logo" replaces the logo in
-  # the header of the dashboard as well. An override is drawn 30% smaller than its
-  # viewBox before its icons are generated, because own SVGs usually fill the canvas
-  # edge to edge; an SVG without a viewBox keeps its size.
+  # Logo override as a base64 encoded SVG document, e.g. `base64 -w0 logo.svg`. It is
+  # the source of the favicons and of all the PWA icons, and it replaces the logo in
+  # the header of the dashboard. The color "#000000" of the SVG is repainted with the
+  # theme contrast color, so an override should use it too. An override is drawn 30%
+  # smaller than its viewBox before its icons are generated, because own SVGs usually
+  # fill the canvas edge to edge; an SVG without a viewBox keeps its size.
   # logo: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci...   # <svg ...>
-  #
-  # overrides only the small logo used for the favicons
-  # logo_small: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci...   # <svg ...>
 
   colors:
     # main color

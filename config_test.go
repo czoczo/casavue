@@ -54,7 +54,7 @@ func TestUnusableConfigurationsAreRefused(t *testing.T) {
 		"unknown log level":      "logging:\n  level: \"everything\"\n",
 		"invalid theme color":    "customization:\n  colors:\n    theme: \"purple\"\n",
 		"logo not base64":        "customization:\n  logo: \"###\"\n",
-		"logo not an svg":        "customization:\n  logo_small: \"PGh0bWwvPg==\"\n", // <html/>
+		"logo not an svg":        "customization:\n  logo: \"PGh0bWwvPg==\"\n", // <html/>
 	} {
 		if _, err := parseMainConfig([]byte(mainYAML)); err == nil {
 			t.Errorf("%s must be refused", name)
