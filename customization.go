@@ -19,15 +19,18 @@ import (
 // (color and title) settings.
 
 func updateFrontendFiles() {
-	updateManifestJSON()
-	updateIndexHTML()
-
-	// has to be after index.html and manifest.json updates, so generated checksums match
-	updateServiceWorkerJS()
-
 	generatePWAIcons()
 
 	writeOverriddenLogo(config.Customization)
+
+	updateManifestJSON()
+	updateIndexHTML()
+
+	// has to be after the icons are generated, so their URLs get stamped with the new
+	// content, and after index.html and manifest.json updates, so generated checksums
+	// match
+	stampIconURLs()
+	updateServiceWorkerJS()
 
 	// if static mode, copy files for docker volume share
 	if *staticMode {
@@ -40,12 +43,16 @@ func updateFrontendFiles() {
 }
 
 const (
-	pwaIconsFolderPath  = compiledVuePath + "/img/icons"
 	sourceLogoPath      = sourceVuePath + "/assets/logo.svg"
 	sourceSmallLogoPath = sourceVuePath + "/assets/logo_small.svg"
-	manifestJSON        = compiledVuePath + "/manifest.json"
-	indexHtmlPath       = compiledVuePath + "/index.html"
-	faviconPath         = compiledVuePath + "/favicon.ico"
+)
+
+// variables so that a test can point them at its own files
+var (
+	pwaIconsFolderPath = compiledVuePath + "/img/icons"
+	manifestJSON       = compiledVuePath + "/manifest.json"
+	indexHtmlPath      = compiledVuePath + "/index.html"
+	faviconPath        = compiledVuePath + "/favicon.ico"
 )
 
 // the SVG the logo of the dashboard header is drawn from; a variable so that a test
@@ -193,6 +200,49 @@ func generatePWAIcons() {
 		}
 		size, _ := extractSize(path)
 		convertSvgToPng(mainLogo, path, size)
+	}
+}
+
+// iconStamp is the content of a generated icon as a URL version. A browser keeps a
+// favicon of its own under the URL it first loaded, and neither rewriting the file nor
+// the service worker invalidates it, so a regenerated icon only gets shown once it is
+// asked for under a new URL.
+func iconStamp(path string) string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		log.Error("Error reading ", path, ": ", err)
+		return ""
+	}
+	sum := md5.Sum(content)
+	return hex.EncodeToString(sum[:])[:8]
+}
+
+// stampIconURLs writes the stamp of every generated icon into the icon URLs of
+// index.html and manifest.json: a new icon content means a new URL, for the browser,
+// its favicon cache and the precached service worker alike. Unchanged icons keep
+// their URL and stay cached. The stamp of the previous run is replaced, so a
+// configuration reload re-stamps instead of stacking queries.
+func stampIconURLs() {
+	paths, err := listLogoFiles()
+	if err != nil {
+		log.Error("Error listing the icons in ", pwaIconsFolderPath, ": ", err)
+		return
+	}
+
+	stamps := make(map[string]string, len(paths)+1)
+	for _, path := range append(paths, faviconPath) {
+		if stamp := iconStamp(path); stamp != "" {
+			stamps[filepath.Base(path)] = stamp
+		}
+	}
+
+	for _, file := range []string{indexHtmlPath, manifestJSON} {
+		content := readStringFile(file)
+		for name, stamp := range stamps {
+			re := regexp.MustCompile(regexp.QuoteMeta(name) + `(?:\?v=[0-9a-f]+)?`)
+			content = re.ReplaceAllLiteralString(content, name+"?v="+stamp)
+		}
+		writeStringFile(file, content)
 	}
 }
 
