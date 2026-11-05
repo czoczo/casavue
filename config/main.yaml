@@ -37,6 +37,8 @@ content_filters:
       
     # Go regexp syntax compatible (https://pkg.go.dev/regexp/syntax)
     # catches all values by default
+    # newlines and spaces of the value are ignored, so a long pattern can be written
+    # over several lines
     pattern: "^.*$"
 
   item:
@@ -48,6 +50,8 @@ content_filters:
 
     # Go regexp syntax compatible (https://pkg.go.dev/regexp/syntax)
     # catches all values by default
+    # newlines and spaces of the value are ignored, so a long pattern can be written
+    # over several lines
     pattern: "^.*$"
     
 # Allows connections to servers with an invalid TLS certificate

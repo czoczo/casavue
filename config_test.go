@@ -71,6 +71,38 @@ func TestUnusableConfigurationsAreRefused(t *testing.T) {
 	}
 }
 
+// A long pattern has to be writable over several lines in main.yaml: the newlines and
+// spaces of that layout are not part of the expression.
+func TestFilterPatternsIgnoreWhitespace(t *testing.T) {
+	cfg := mustParseMainConfig(t, `content_filters:
+  namespace:
+    mode: "include"
+    pattern: |
+      ^(
+        public |
+        private
+      )$
+  item:
+    mode: "exclude"
+    pattern: "^ (gone |away) $"
+`)
+
+	if cfg.Content_filters.Namespace.Pattern != "^(public|private)$" {
+		t.Errorf("namespace pattern: %q", cfg.Content_filters.Namespace.Pattern)
+	}
+	if cfg.Content_filters.Item.Pattern != "^(gone|away)$" {
+		t.Errorf("item pattern: %q", cfg.Content_filters.Item.Pattern)
+	}
+
+	// applyFilter tells whether an item is to be skipped
+	if applyFilter(cfg.Content_filters.Namespace.Pattern, "include", "public") {
+		t.Error("multi line pattern does not match its namespace")
+	}
+	if !applyFilter(cfg.Content_filters.Namespace.Pattern, "include", "other") {
+		t.Error("multi line pattern matches a namespace it should not")
+	}
+}
+
 // A broken file which lands on the cluster later may only ever mean the previous
 // configuration stays in use.
 func TestBrokenConfigIsNotApplied(t *testing.T) {

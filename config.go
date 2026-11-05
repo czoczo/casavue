@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,10 +159,19 @@ func parseMainConfig(mainYAML []byte) (Config, error) {
 	if err := yaml.Unmarshal(mainYAML, &cfg); err != nil {
 		return cfg, err
 	}
+	cfg.Content_filters.Namespace.Pattern = stripPatternWhitespace(cfg.Content_filters.Namespace.Pattern)
+	cfg.Content_filters.Item.Pattern = stripPatternWhitespace(cfg.Content_filters.Item.Pattern)
 	if err := validateMainConfig(cfg); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// stripPatternWhitespace makes the whitespace of a filter pattern disappear, so a long
+// pattern can be written over several lines in main.yaml. A pattern only ever matches
+// a Kubernetes namespace or object name, and neither contains whitespace.
+func stripPatternWhitespace(pattern string) string {
+	return strings.Join(strings.Fields(pattern), "")
 }
 
 func parseStaticItems(itemsYAML []byte) (StaticItems, error) {
