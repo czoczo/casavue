@@ -6,12 +6,9 @@ customization:
   # influences page title and PWA name
   name: CasaVue
 
-  # Logo override as a base64 encoded SVG document, e.g. `base64 -w0 logo.svg`. It is
-  # the source of the favicons and of all the PWA icons, and it replaces the logo in
-  # the header of the dashboard. The color "#000000" of the SVG is repainted with the
-  # theme contrast color, so an override should use it too. An override is drawn 30%
-  # smaller than its viewBox before its icons are generated, because own SVGs usually
-  # fill the canvas edge to edge; an SVG without a viewBox keeps its size.
+  # Own logo as a base64 encoded SVG (e.g. `base64 -w0 logo.svg`): source of the
+  # favicons, the PWA icons and the dashboard header logo. Its "#000000" is repainted
+  # with the theme contrast color and it is drawn 30% smaller than its viewBox.
   # logo: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci...   # <svg ...>
 
   colors:
@@ -37,8 +34,14 @@ content_filters:
       
     # Go regexp syntax compatible (https://pkg.go.dev/regexp/syntax)
     # catches all values by default
-    # newlines and spaces of the value are ignored, so a long pattern can be written
-    # over several lines
+    # whitespace of the value is ignored, so a pattern may span lines, e.g.:
+    #   mode: "exclude"
+    #   pattern: >-
+    #     ^(
+    #       kube-.* |
+    #       traefik-.* |
+    #       monitoring.*
+    #     )$
     pattern: "^.*$"
 
   item:
@@ -50,8 +53,14 @@ content_filters:
 
     # Go regexp syntax compatible (https://pkg.go.dev/regexp/syntax)
     # catches all values by default
-    # newlines and spaces of the value are ignored, so a long pattern can be written
-    # over several lines
+    # the same for item names, e.g.:
+    #   mode: "exclude"
+    #   pattern: >-
+    #     ^(
+    #       .*-canary |
+    #       .*-test.* |
+    #       staging-.*
+    #     )$
     pattern: "^.*$"
     
 # Allows connections to servers with an invalid TLS certificate
