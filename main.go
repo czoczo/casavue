@@ -72,7 +72,7 @@ func main() {
 	}
 
 	// a new ConfigMap of the main config or of the items is applied without restarting
-	// the pod
+	// the pod; kept as the fallback of the ConfigMap watch below
 	go watchConfigFiles()
 
 	// kubernetes.go
@@ -84,6 +84,9 @@ func main() {
 	} else {
 		go getAndWatchKubernetesIngressItems(kconfig)
 		go getAndWatchKubernetesGatewayRoutes(kconfig)
+		// the same ConfigMaps the configuration volume comes from, so a change is
+		// applied in about a second instead of after the kubelet volume sync
+		go watchConfigMaps(kconfig)
 	}
 
 	// httpserver.go

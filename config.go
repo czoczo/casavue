@@ -209,11 +209,13 @@ func validateMainConfig(cfg Config) error {
 	return nil
 }
 
-// applyConfig makes a parsed configuration the one the app works with and returns
-// the static items which were added or changed. At startup those are crawled later
-// on by refreshItems(), which crawls everything.
-func applyConfig(cfg Config, staticItems StaticItems) (changedKeys []string) {
+// applyConfig makes a parsed configuration the one the app works with and reports
+// whether the customization changed, together with the static items which were added
+// or changed. At startup those are crawled later on by refreshItems(), which crawls
+// everything.
+func applyConfig(cfg Config, staticItems StaticItems) (customizationChanged bool, changedKeys []string) {
 	configMu.Lock()
+	customizationChanged = config.Customization != cfg.Customization
 	config = cfg
 	httpClient = newHttpClient(cfg.Allow_skip_tls_verify)
 	configMu.Unlock()
@@ -221,7 +223,7 @@ func applyConfig(cfg Config, staticItems StaticItems) (changedKeys []string) {
 	applyLogging(cfg.Logging)
 	writeFrontendConfig(cfg)
 
-	return readStaticItems(staticItems)
+	return customizationChanged, readStaticItems(staticItems)
 }
 
 func applyLogging(logging Logging) {
@@ -256,13 +258,17 @@ func writeFrontendConfig(cfg Config) {
 	}
 }
 
-// contents of the configuration files as the watcher last saw them
-var lastMainYAML, lastItemsYAML []byte
+// contents of the configuration files as the watcher last saw them. The file polling
+// and the two ConfigMap informers read and write them, so only reloadIfChanged does.
+var (
+	lastMainYAML, lastItemsYAML []byte
+	configReloadMu              sync.Mutex
+)
 
 // watchConfigFiles reloads the configuration when the content of the files changes,
-// so a ConfigMap rolled out to Kubernetes is applied without restarting the pod.
-// shortcut: the files are polled, because the kubelet updates a mounted ConfigMap by
-// swapping a symlink; upgrade to inotify or to a ConfigMap watch if seconds matter.
+// so a ConfigMap rolled out to Kubernetes is applied without restarting the pod. It is
+// the fallback of the ConfigMap watch (config_kubernetes.go), which cannot work without
+// Kubernetes access.
 func watchConfigFiles() {
 	for {
 		time.Sleep(configReloadCheckInterval)
@@ -280,6 +286,15 @@ func reloadChangedConfig() bool {
 		log.Warning("Configuration files unreadable: ", err)
 		return false
 	}
+	return reloadIfChanged(mainYAML, itemsYAML)
+}
+
+// reloadIfChanged applies configuration which differs from what was applied last time
+// and reports whether it did. Every way new configuration arrives goes through here, so
+// the file polling does not reapply what the ConfigMap watch has just applied.
+func reloadIfChanged(mainYAML []byte, itemsYAML []byte) bool {
+	configReloadMu.Lock()
+	defer configReloadMu.Unlock()
 
 	if bytes.Equal(mainYAML, lastMainYAML) && bytes.Equal(itemsYAML, lastItemsYAML) {
 		return false
@@ -307,9 +322,7 @@ func reloadConfig(mainYAML []byte, itemsYAML []byte) {
 
 	// title and colors are baked into the served frontend files, so they have to be
 	// regenerated; everything else is read from the configuration at runtime
-	customizationChanged := config.Customization != cfg.Customization
-
-	changedKeys := applyConfig(cfg, staticItems)
+	customizationChanged, changedKeys := applyConfig(cfg, staticItems)
 
 	if customizationChanged {
 		updateFrontendFiles()

@@ -45,7 +45,7 @@ To change CasaVue configuration:
    ```
  </Steps>
 :::note[Configuration applied automatically]
-No pod restart needed: CasaVue reads its configuration files again whenever they change. The kubelet first has to propagate the ConfigMap into the pod (up to a minute of its own sync period), CasaVue applies the new files within the next 5 seconds.
+No pod restart needed: CasaVue watches its configuration ConfigMaps and applies a change within seconds. Reading them is part of the RBAC of the chart (a Role in the namespace of the release). Where they cannot be read, CasaVue falls back to reading its configuration files every 5 seconds, and the kubelet needs up to a minute of its own sync period to propagate a ConfigMap into the pod.
 :::
 
 ### Uninstalling the Chart
