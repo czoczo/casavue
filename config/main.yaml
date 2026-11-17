@@ -8,8 +8,8 @@ customization:
 
   # Own logo as a base64 encoded SVG (e.g. `base64 -w0 logo.svg`): source of the
   # favicons, the PWA icons and the dashboard header logo. Its "#000000" is repainted
-  # with the theme contrast color and it is drawn 30% smaller than its viewBox.
-  # logo: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci...   # <svg ...>
+  # with the theme contrast color.
+  # logo: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci... 
 
   colors:
     # main color
@@ -39,7 +39,7 @@ content_filters:
     #   pattern: >-
     #     ^(
     #       kube-.* |
-    #       traefik-.* |
+    #       traefik |
     #       monitoring.*
     #     )$
     pattern: "^.*$"
@@ -53,7 +53,7 @@ content_filters:
 
     # Go regexp syntax compatible (https://pkg.go.dev/regexp/syntax)
     # catches all values by default
-    # the same for item names, e.g.:
+    # whitespace of the value is ignored, so a pattern may span lines, e.g.:
     #   mode: "exclude"
     #   pattern: >-
     #     ^(

@@ -6,8 +6,6 @@ on:
     paths: [ VERSION_CHART.txt ]
   workflow_dispatch:
 
-# chart-releaser commits and tags the gh-pages branch with the chart index,
-# the Trivy step uploads a SARIF report
 permissions:
   contents: write
   security-events: write

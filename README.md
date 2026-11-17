@@ -24,3 +24,19 @@ A couple of options:
 - Read about the [features](https://casavue.app/about/features/) of CasaVue.
 - Having access to running K8s? Try [quick install](https://casavue.app/deployment/quick_start/).
 - Further explore project [home page](https://casavue.app).
+
+## :bar_chart: Star History
+
+<a href="https://www.star-history.com/?type=date&repos=czoczo%2Fcasavue">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=czoczo/casavue&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=czoczo/casavue&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=czoczo/casavue&type=date&legend=top-left" />
+ </picture>
+</a>
+
+## License
+
+GNU General Public License v3.0 or later
+
+See [LICENSE](LICENSE) to see the full text.
