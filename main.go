@@ -13,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/homedir"
 )
 
@@ -71,10 +72,6 @@ func main() {
 		return
 	}
 
-	// a new ConfigMap of the main config or of the items is applied without restarting
-	// the pod; kept as the fallback of the ConfigMap watch below
-	go watchConfigFiles()
-
 	// kubernetes.go
 	// without any Kubernetes access the items of the config files are still
 	// served, otherwise the container would exit and show nothing
@@ -84,11 +81,24 @@ func main() {
 	} else {
 		go getAndWatchKubernetesIngressItems(kconfig)
 		go getAndWatchKubernetesGatewayRoutes(kconfig)
-		// the same ConfigMaps the configuration volume comes from, so a change is
-		// applied in about a second instead of after the kubelet volume sync
-		go watchConfigMaps(kconfig)
 	}
+
+	// a new ConfigMap of the main config or of the items is applied without restarting
+	// the pod
+	startConfigurationReload(kconfig)
 
 	// httpserver.go
 	initHttpServer()
+}
+
+// startConfigurationReload runs the one source of a new configuration: the watch of the
+// configuration ConfigMaps when they can be watched, the polling of the mounted
+// configuration files otherwise. Never both, because the mounted files hold the old
+// ConfigMap until the kubelet has synced the new one into the pod (up to a minute), so a
+// poller next to the watch applies the replaced configuration again every 5 seconds.
+func startConfigurationReload(kconfig *rest.Config) {
+	if kconfig != nil && watchConfigMaps(kconfig) {
+		return
+	}
+	go watchConfigFiles()
 }

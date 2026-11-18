@@ -84,26 +84,30 @@ func configMapEventHandlers(content *configMapContent, key string) cache.Resourc
 
 // watchConfigMaps watches the ConfigMaps the /app/config volume is built from, so an
 // applied or upgraded configuration arrives in about a second instead of after the
-// kubelet volume sync of up to a minute. The file polling keeps running: it is what
-// carries a configuration change when there is no Kubernetes access, no namespace to
-// look in or no right to read ConfigMaps.
-func watchConfigMaps(kconfig *rest.Config) {
+// kubelet volume sync of up to a minute, and reports whether it does. It does not when
+// there is no Kubernetes access, no namespace to look in or no right to read ConfigMaps;
+// the polling of the configuration files is what carries a change then.
+//
+// Only one of the two may run: until the kubelet has synced a new ConfigMap into the pod
+// (up to a minute), the mounted files hold the configuration which was just replaced, and
+// applying them afterwards flips the dashboard back to the old one.
+func watchConfigMaps(kconfig *rest.Config) bool {
 	namespace := serviceAccountNamespace()
 	if namespace == "" {
 		log.Debug("Configuration ConfigMaps not watched, no namespace to look in")
-		return
+		return false
 	}
 
 	clientset, err := kubernetes.NewForConfig(kconfig)
 	if err != nil {
 		log.Warn("Error creating K8s config for the configuration watch: ", err)
-		return
+		return false
 	}
 	// one probe before the watch: without the right to list ConfigMaps the watch would
 	// be retried and logged forever, while the file polling works anyway
 	if _, err := clientset.CoreV1().ConfigMaps(namespace).List(context.Background(), metav1.ListOptions{Limit: 1}); err != nil {
 		log.Info("Configuration ConfigMaps in namespace ", namespace, " cannot be read (", err, "), configuration files are polled instead")
-		return
+		return false
 	}
 
 	content := newConfigMapContent()
@@ -120,6 +124,7 @@ func watchConfigMaps(kconfig *rest.Config) {
 	}
 
 	log.Info("Watching the configuration ConfigMaps in namespace ", namespace)
+	return true
 }
 
 // serviceAccountNamespace is the namespace of the running pod, empty when not running
