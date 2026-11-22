@@ -19,6 +19,11 @@ func TestStatusCheckAcceptsOnlyDashboardItems(t *testing.T) {
 	}))
 	defer forbidden.Close()
 
+	secret := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusUnauthorized)
+	}))
+	defer secret.Close()
+
 	// httptest serves a self signed certificate, which the client must not accept
 	badCert := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer badCert.Close()
@@ -28,6 +33,7 @@ func TestStatusCheckAcceptsOnlyDashboardItems(t *testing.T) {
 			"default/up":        {Namespace: "default", Name: "up", URL: upstream.URL},
 			"default/down":      {Namespace: "default", Name: "down", URL: "http://127.0.0.1:9/"},
 			"default/forbidden": {Namespace: "default", Name: "forbidden", URL: forbidden.URL},
+			"default/secret":    {Namespace: "default", Name: "secret", URL: secret.URL},
 			"default/bad-cert":  {Namespace: "default", Name: "bad-cert", URL: badCert.URL},
 		},
 		versions: map[string]int64{"default/up": 1, "default/down": 1},
@@ -36,6 +42,7 @@ func TestStatusCheckAcceptsOnlyDashboardItems(t *testing.T) {
 	for key, expected := range map[string]int{
 		"default/up":        http.StatusOK,
 		"default/forbidden": http.StatusOK,
+		"default/secret":    http.StatusOK,
 		"default/bad-cert":  http.StatusFailedDependency,
 		"default/down":      http.StatusInternalServerError,
 		"other/not-an-item": http.StatusNotFound,
