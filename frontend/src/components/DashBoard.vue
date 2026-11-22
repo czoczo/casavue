@@ -170,6 +170,11 @@ export default {
         // the item left the dashboard while its check was running
         return;
       }
+      // 424 comes from CasaVue: the site answered, with an untrusted certificate
+      if (status === 424) {
+        this.itemsStatus[name].status = 'badcert';
+        return;
+      }
       const validStatusCodes = [200, 401];
       this.itemsStatus[name].status = validStatusCodes.includes(status) ? 'green' : 'red';
     },

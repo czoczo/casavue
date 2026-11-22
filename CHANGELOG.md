@@ -20,9 +20,12 @@
   - Generated avatars are cached by the browser for a day instead of being generated again on every view.
   - Configuration is reloaded when `main.yaml` or `items.yaml` change, so a new ConfigMap applied to Kubernetes is used without restarting CasaVue.
   - Newlines and spaces are removed from the `content_filters` patterns when `main.yaml` is read, so a long regular expression can be written over several lines for readability.
+  - An item answering `403 Forbidden` is reported as up, like the ones answering 200 or 401.
+  - `/statusCheck/` answers `424 Failed Dependency` when an HTTPS item presents a TLS certificate which cannot be trusted (unknown issuer, expired, for another host).
 - WebUI:
   - Fixed dashboard breaking after an item was removed while its status was being checked.
   - Status of removed items is no longer kept and re-checked.
+  - An HTTPS item with an untrusted certificate shows `Invalid TLS certificate` instead of `Site unavailable`.
 
 ## 0.1.3
 - WebUI: Fixed items not showing on dashboard when no labels on Ingress resource.

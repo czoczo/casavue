@@ -17,6 +17,10 @@
           <font-awesome-icon icon="fa-solid fa-exclamation-triangle" />
           <span class="tooltiptext">Site unavailable</span>
         </div>
+        <div class="status-icon" v-if="isCertificateInvalid(item.name)">
+          <font-awesome-icon icon="fa-solid fa-exclamation-triangle" />
+          <span class="tooltiptext">Invalid TLS certificate</span>
+        </div>
         <div class="status-icon" v-if="isStatusUnavailable(item.name)">
           <font-awesome-icon icon="fa-solid fa-circle-question" />
           <span class="tooltiptext">Status unknow</span>
@@ -49,6 +53,9 @@ export default {
     },
     isSiteUnavailable(status) {
       return this.itemsStatus[status].status == 'red';
+    },
+    isCertificateInvalid(status) {
+      return this.itemsStatus[status].status == 'badcert';
     },
     getItemName(item) {
       // the backend resolves the displayed name: annotation override, then the

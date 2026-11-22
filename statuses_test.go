@@ -14,16 +14,29 @@ func TestStatusCheckAcceptsOnlyDashboardItems(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer upstream.Close()
 
+	forbidden := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusForbidden)
+	}))
+	defer forbidden.Close()
+
+	// httptest serves a self signed certificate, which the client must not accept
+	badCert := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer badCert.Close()
+
 	dashboardItems = DashboardItemsStore{
 		items: map[string]DashEntry{
-			"default/up":   {Namespace: "default", Name: "up", URL: upstream.URL},
-			"default/down": {Namespace: "default", Name: "down", URL: "http://127.0.0.1:9/"},
+			"default/up":        {Namespace: "default", Name: "up", URL: upstream.URL},
+			"default/down":      {Namespace: "default", Name: "down", URL: "http://127.0.0.1:9/"},
+			"default/forbidden": {Namespace: "default", Name: "forbidden", URL: forbidden.URL},
+			"default/bad-cert":  {Namespace: "default", Name: "bad-cert", URL: badCert.URL},
 		},
 		versions: map[string]int64{"default/up": 1, "default/down": 1},
 	}
 
 	for key, expected := range map[string]int{
 		"default/up":        http.StatusOK,
+		"default/forbidden": http.StatusOK,
+		"default/bad-cert":  http.StatusFailedDependency,
 		"default/down":      http.StatusInternalServerError,
 		"other/not-an-item": http.StatusNotFound,
 		"http://169.254.169.254/latest/meta-data/": http.StatusNotFound,
