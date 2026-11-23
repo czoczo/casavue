@@ -3,28 +3,134 @@
 package main
 
 import (
-	"bufio"
+	"encoding/base64"
 	"fmt"
-	"github.com/PerformLine/go-stockutil/colorutil"
 	ico "github.com/biessek/golang-ico"
 	"github.com/disintegration/imaging"
 	log "github.com/sirupsen/logrus"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/png"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
+
+// parseThemeColor reads the configured theme color, "#rrggbb" or "#rgb".
+// shortcut: hex only, which is what the configuration documents; upgrade to a
+// full CSS color parser if named or rgb() values are to be accepted.
+func parseThemeColor(value string) (color.NRGBA, error) {
+	hexColor := strings.TrimPrefix(strings.TrimSpace(value), "#")
+	if len(hexColor) == 3 {
+		// "#f0a" means "#ff00aa"
+		hexColor = strings.Repeat(hexColor[0:1], 2) + strings.Repeat(hexColor[1:2], 2) + strings.Repeat(hexColor[2:3], 2)
+	}
+	if len(hexColor) != 6 {
+		return color.NRGBA{}, fmt.Errorf("not a color: %q", value)
+	}
+	rgb, err := strconv.ParseUint(hexColor, 16, 32)
+	if err != nil {
+		return color.NRGBA{}, fmt.Errorf("not a color: %q", value)
+	}
+	return color.NRGBA{
+		R: uint8(rgb >> 16),
+		G: uint8(rgb >> 8),
+		B: uint8(rgb),
+		A: 255,
+	}, nil
+}
+
+func roundToPlaces(x float64, places int) float64 {
+	multi := math.Pow(10, float64(places))
+	return math.Round(x*multi) / multi
+}
+
+// rgbToHsl converts red, green and blue in [0,1] to hue in degrees and
+// saturation and lightness in [0,1]. Values are rounded to 2 places, as the
+// generated logo colors depend on it.
+func rgbToHsl(r, g, b float64) (float64, float64, float64) {
+	max := math.Max(math.Max(r, g), b)
+	min := math.Min(math.Min(r, g), b)
+	chroma := max - min
+
+	hue := 0.0
+	if chroma != 0 {
+		switch {
+		case r == max:
+			hue = math.Mod((g-b)/chroma, 6)
+		case g == max:
+			hue = (b-r)/chroma + 2
+		default:
+			hue = (r-g)/chroma + 4
+		}
+		hue *= 60
+	}
+
+	lightness := (max + min) / 2
+	saturation := 0.0
+	if lightness != 1 {
+		saturation = chroma / (1 - math.Abs(2*lightness-1))
+	}
+	if math.IsNaN(saturation) {
+		// black and white: chroma 0 over 0
+		saturation = 0
+	}
+
+	const rounding = 2
+	hue = roundToPlaces(hue, rounding)
+	saturation = roundToPlaces(saturation, rounding)
+	lightness = roundToPlaces(lightness, rounding)
+	if hue < 0 {
+		hue = 360 + hue
+	}
+	return hue, saturation, lightness
+}
+
+// hslToRgb converts hue in degrees plus saturation and lightness in [0,1] back
+// to red, green and blue.
+func hslToRgb(hue, saturation, lightness float64) (uint8, uint8, uint8) {
+	hue = math.Mod(hue, 360)
+	var r, g, b float64
+	if saturation == 0 {
+		r, g, b = lightness, lightness, lightness
+	} else {
+		chroma := (1 - math.Abs(2*lightness-1)) * saturation
+		sector := hue / 60
+		intermediate := chroma * (1 - math.Abs(math.Mod(sector, 2)-1))
+		switch {
+		case sector <= 1:
+			r, g, b = chroma, intermediate, 0
+		case sector <= 2:
+			r, g, b = intermediate, chroma, 0
+		case sector <= 3:
+			r, g, b = 0, chroma, intermediate
+		case sector <= 4:
+			r, g, b = 0, intermediate, chroma
+		case sector <= 5:
+			r, g, b = intermediate, 0, chroma
+		default:
+			r, g, b = chroma, 0, intermediate
+		}
+		offset := lightness - chroma/2
+		r += offset
+		g += offset
+		b += offset
+	}
+	return uint8(roundToPlaces(r, 2) * 255), uint8(roundToPlaces(g, 2) * 255), uint8(roundToPlaces(b, 2) * 255)
+}
 
 // getContrastColor takes a color in hexadecimal format (e.g. "#aabbcc") and
 // returns a contrasting color in RGB hexadecimal format.
 func getContrastColor(inputColor string) string {
 	// Parse the input color
-	baseColor, err := colorutil.Parse(inputColor)
+	baseColor, err := parseThemeColor(inputColor)
 	if err != nil {
 		// Handle parsing error
 		log.Fatal("Error parsing input color:", err)
@@ -32,7 +138,7 @@ func getContrastColor(inputColor string) string {
 	}
 
 	// Convert to HSL
-	h, s, l := baseColor.HSL()
+	h, s, l := rgbToHsl(float64(baseColor.R)/255, float64(baseColor.G)/255, float64(baseColor.B)/255)
 
 	// Adjust lightness based on the condition
 	if l > 0.5 {
@@ -42,37 +148,125 @@ func getContrastColor(inputColor string) string {
 	}
 
 	// Convert back to RGB
-	r, g, b := colorutil.HslToRgb(h, s, l)
+	r, g, b := hslToRgb(h, s, l)
 	adjustedColor := fmt.Sprintf("#%02x%02x%02x", r, g, b)
 
 	return adjustedColor
 }
 
-func openSvgToString(svgPath string) (string, error) {
-	// Open SVG file
-	svgFile, err := os.Open(svgPath)
+// logoSvgColor is the fill color the shipped logo SVGs are drawn with; the icon
+// generation swaps it for the contrast color of the theme. An overriding logo has to
+// use it as well to get recolored.
+const logoSvgColor = "#000000"
+
+// logoSvg decodes an SVG logo override from the configuration. An empty override
+// means "nothing configured". The wrapped base64 which terminals and YAML block
+// scalars produce is accepted.
+func logoSvg(override string) (string, error) {
+	if strings.TrimSpace(override) == "" {
+		return "", nil
+	}
+	svg, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(override), ""))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("not valid base64: %w", err)
 	}
-	defer svgFile.Close()
-
-	// Read the SVG content
-	scanner := bufio.NewScanner(svgFile)
-	var svgContent string
-	for scanner.Scan() {
-		svgContent += scanner.Text() + "\n"
+	if !strings.Contains(string(svg), "<svg") {
+		return "", fmt.Errorf("decoded content is not an SVG document")
 	}
-
-	return svgContent, nil
+	return string(svg), nil
 }
 
-func convertSvgToFavicons(svgPath string) error {
-	svgContent, _ := openSvgToString(svgPath)
+// logoScale is how much of its own canvas an overriding logo keeps of it before the
+// icons are generated out of it: an own SVG usually fills the canvas edge to edge.
+const logoScale = 0.7
 
-	// Replace 'fill="#e0f3ff"' with the value from config.Customization.Colors.Contrast
+var (
+	viewBoxRegex = regexp.MustCompile(`viewBox="([^"]*)"`)
+	svgTagRegex  = regexp.MustCompile(`(?s)<svg\b[^>]*>`)
+)
+
+// shrinkLogoSvg reduces an overriding logo by 30% before the icons are generated out
+// of it. Its content gets wrapped in one scaled <g> instead of the paths being
+// rewritten, so colors, gradients and the repainting of the icon generation keep
+// working. The viewBox is not used for the reduction either: an icon drawn in a
+// viewBox with a negative origin ends up off the canvas of the raster graphics.
+// shortcut: an SVG without a viewBox (or with a viewBox which is not four numbers)
+// keeps its size, as there is no canvas to keep the logo centered in; upgrade to
+// transforming the paths if such logos have to be reduced as well.
+func shrinkLogoSvg(svg string) string {
+	dims := viewBoxRegex.FindStringSubmatchIndex(svg)
+	if dims == nil {
+		return svg
+	}
+
+	canvas := make([]float64, 4)
+	numbers := strings.Fields(strings.ReplaceAll(svg[dims[2]:dims[3]], ",", " "))
+	if len(numbers) != 4 {
+		return svg
+	}
+	for idx, number := range numbers {
+		value, err := strconv.ParseFloat(number, 64)
+		if err != nil {
+			return svg
+		}
+		canvas[idx] = value
+	}
+	if canvas[2] <= 0 || canvas[3] <= 0 {
+		return svg
+	}
+
+	// the root tag has to stay outside the scaled group, so the background of the
+	// favicons is not scaled along with the logo
+	start := svgTagRegex.FindStringIndex(svg)
+	closing := strings.LastIndex(svg, "</svg>")
+	if start == nil || closing < start[1] {
+		return svg // a self-closing root tag: nothing to wrap
+	}
+
+	// the center of the canvas is the one point which stays where it is while scaling
+	scaled := fmt.Sprintf(`<g transform="translate(%v %v) scale(%v %v)">`,
+		svgNumber((canvas[0]+canvas[2]/2)*(1-logoScale)), svgNumber((canvas[1]+canvas[3]/2)*(1-logoScale)),
+		svgNumber(logoScale), svgNumber(logoScale))
+
+	return svg[:start[1]] + scaled + svg[start[1]:closing] + "</g>" + svg[closing:]
+}
+
+// svgNumber writes a value of a generated SVG without exponent and without trailing
+// zeros, so the SVG stays readable.
+func svgNumber(value float64) string {
+	return strconv.FormatFloat(roundToPlaces(value, 3), 'f', -1, 64)
+}
+
+func configuredLogoSvg(override string) string {
+	svg, err := logoSvg(override)
+	if err != nil {
+		log.Error("Ignoring logo override: ", err)
+	}
+	return svg
+}
+
+func readSvgFile(svgPath string) string {
+	svg, err := os.ReadFile(svgPath)
+	if err != nil {
+		log.Error("Error reading ", svgPath, ": ", err)
+	}
+	return string(svg)
+}
+
+// logoSvgs returns the SVG content the PWA icons are generated from: the configured
+// base64 override, reduced by 30%, which is then the source of every icon, or the
+// SVG files of CasaVue elsewhere - those keep the size they always had.
+func logoSvgs(customization Customization) (mainLogo string, smallLogo string) {
+	if override := shrinkLogoSvg(configuredLogoSvg(customization.Logo)); override != "" {
+		return override, override
+	}
+	return readSvgFile(sourceLogoPath), readSvgFile(sourceSmallLogoPath)
+}
+
+func convertSvgToFavicons(svgContent string) error {
 	themeColor := config.Customization.Colors.Theme
 	contrastColor := getContrastColor(themeColor)
-	svgContent = strings.ReplaceAll(string(svgContent), `fill="#e0f3ff"`, fmt.Sprintf(`fill="%s"`, contrastColor))
+	svgContent = strings.ReplaceAll(svgContent, `fill="`+logoSvgColor+`"`, fmt.Sprintf(`fill="%s"`, contrastColor))
 
 	// Save the modified SVG content to a new file at 'dist/img/icons/safari-pinned-tab.svg'
 	err := ioutil.WriteFile(pwaIconsFolderPath+"/safari-pinned-tab.svg", []byte(svgContent), 0644)
@@ -80,8 +274,11 @@ func convertSvgToFavicons(svgPath string) error {
 		return fmt.Errorf("error saving modified SVG: %v", err)
 	}
 
-	// Replace '<path' with '<rect width="100%" height="100%" fill="red"/>\n<path'
-	svgContent = strings.ReplaceAll(svgContent, `<path`, `<rect width="100%" height="100%" rx="80" ry="80" fill="`+themeColor+`"/>\n<path`)
+	// The background of the favicon goes right inside the root tag, so that it keeps
+	// covering the whole icon also for a logo which is scaled down in a <g>
+	if start := svgTagRegex.FindStringIndex(svgContent); start != nil {
+		svgContent = svgContent[:start[1]] + `<rect width="100%" height="100%" rx="80" ry="80" fill="` + themeColor + `"/>\n` + svgContent[start[1]:]
+	}
 
 	// Save the modified SVG content to a new file at 'dist/img/favicon.svg'
 	err = ioutil.WriteFile(pwaIconsFolderPath+"/favicon.svg", []byte(svgContent), 0644)
@@ -103,11 +300,9 @@ func convertSvgToFavicons(svgPath string) error {
 	return nil
 }
 
-func convertSvgToPng(svgPath string, pngPath string, sideLength int) error {
-	svgContent, _ := openSvgToString(svgPath)
-
+func convertSvgToPng(svgContent string, pngPath string, sideLength int) error {
 	// Replace color occurrences
-	replacedContent := strings.Replace(svgContent, "#e0f3ff", getContrastColor(config.Customization.Colors.Theme), -1)
+	replacedContent := strings.Replace(svgContent, logoSvgColor, getContrastColor(config.Customization.Colors.Theme), -1)
 	img := svgToRaster(replacedContent, sideLength)
 
 	// Resize the image to add padding (15% of side length)
@@ -115,7 +310,10 @@ func convertSvgToPng(svgPath string, pngPath string, sideLength int) error {
 
 	// Set the background color
 	canvas := image.NewRGBA(image.Rect(0, 0, sideLength, sideLength))
-	bgColor := colorutil.MustParse(config.Customization.Colors.Theme)
+	bgColor, err := parseThemeColor(config.Customization.Colors.Theme)
+	if err != nil {
+		return err
+	}
 	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
 
 	// Center the image on a new square canvas (with the original side length)
@@ -141,7 +339,11 @@ func svgToRaster(svgContent string, sideLength int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, sideLength, sideLength))
 
 	// Set the background color
-	bgColor := colorutil.MustParse(config.Customization.Colors.Theme)
+	bgColor, err := parseThemeColor(config.Customization.Colors.Theme)
+	if err != nil {
+		log.Error(err)
+		return img
+	}
 	draw.Draw(img, img.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
 
 	// draw icon

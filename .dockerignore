@@ -1,0 +1,11 @@
+.git
+.github
+docs
+deployment
+avatars
+casavue
+/*.gif
+/*.png
+
+frontend/node_modules
+frontend/dist

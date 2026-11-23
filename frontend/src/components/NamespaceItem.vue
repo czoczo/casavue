@@ -17,6 +17,10 @@
           <font-awesome-icon icon="fa-solid fa-exclamation-triangle" />
           <span class="tooltiptext">Site unavailable</span>
         </div>
+        <div class="status-icon" v-if="isCertificateInvalid(item.name)">
+          <font-awesome-icon icon="fa-solid fa-exclamation-triangle" />
+          <span class="tooltiptext">Invalid TLS certificate</span>
+        </div>
         <div class="status-icon" v-if="isStatusUnavailable(item.name)">
           <font-awesome-icon icon="fa-solid fa-circle-question" />
           <span class="tooltiptext">Status unknow</span>
@@ -50,20 +54,13 @@ export default {
     isSiteUnavailable(status) {
       return this.itemsStatus[status].status == 'red';
     },
+    isCertificateInvalid(status) {
+      return this.itemsStatus[status].status == 'badcert';
+    },
     getItemName(item) {
-      if (!("labels" in item.data)) {
-        return item.name
-      } 
-        
-      if (item.data.labels == null) {
-        return item.name;
-      }
-
-      if (!("app.kubernetes.io/name" in item.data.labels)) {
-        return item.name
-      }
-      
-      return item.data.labels["app.kubernetes.io/name"]
+      // the backend resolves the displayed name: annotation override, then the
+      // app.kubernetes.io/name label, then the cluster object name
+      return item.data.name || item.name
     },
   },
 }

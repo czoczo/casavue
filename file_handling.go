@@ -49,7 +49,18 @@ func writeJSONFile(filename string, data map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filename, bytes, 0644)
+	return atomicReplace(filename, bytes)
+}
+
+// atomicReplace puts a file in place in one step. The files served to the browser
+// (index.html, manifest.json, config.json) are also rewritten while the dashboard is
+// running, and a reader must never get a half written one.
+func atomicReplace(path string, content []byte) error {
+	tempPath := path + ".tmp"
+	if err := os.WriteFile(tempPath, content, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, path)
 }
 
 func readStringFile(path string) string {
@@ -61,7 +72,7 @@ func readStringFile(path string) string {
 }
 
 func writeStringFile(path string, content string) {
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := atomicReplace(path, []byte(content))
 	if err != nil {
 		log.Fatal("Error writing to the file:", err)
 	}

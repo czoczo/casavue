@@ -19,15 +19,21 @@ func getGeneratedIcon(entry *DashEntry, name string) {
 	}
 
 	if *staticMode {
+		avatarsDir := compiledVuePath + "/" + generatedAvatarsPath
+		if err := os.MkdirAll(avatarsDir, os.ModePerm); err != nil {
+			log.Error("Error creating avatars folder '", avatarsDir, "': ", err)
+			return
+		}
 		filename := strToSha256(name) + ".png"
-		file, err := os.Create(compiledVuePath + "/" + generatedAvatarsPath + "/" + filename)
+		file, err := os.Create(avatarsDir + "/" + filename)
 		if err != nil {
-			panic(err)
+			log.Error("Error creating avatar file: ", err)
+			return
 		}
 		defer file.Close()
-		png.Encode(file, cameron.Identicon([]byte(name), 540, 60))
-		if err != nil {
-			panic(err)
+		if err := png.Encode(file, cameron.Identicon([]byte(name), 540, 60)); err != nil {
+			log.Error("Error encoding avatar: ", err)
+			return
 		}
 
 		entry.IconURL = "./avatars/" + filename
@@ -45,6 +51,8 @@ func avatarHandler(w http.ResponseWriter, r *http.Request) {
 	// Use Cameron to generate avatars
 	buf := bytes.Buffer{}
 	png.Encode(&buf, cameron.Identicon([]byte(name), 540, 60))
+	// the picture depends only on the name in the URL, so it never changes
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "image/png")
 	w.WriteHeader(http.StatusOK)
 	buf.WriteTo(w)

@@ -1,105 +1,90 @@
-// implement order of icon sources to crawl
+// crawling the icon of one dashboard item and refreshing all of them
 
 package main
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
-func crawlItem(name string) {
+// each crawl parses a whole HTML page, so they may not all run at once on a pod
+// limited to 64 MB
+const maxConcurrentCrawls = 8
 
-	// in static generation mode wait,
+var crawlSlots = make(chan struct{}, maxConcurrentCrawls)
+
+func crawlItem(key string) {
+	crawlSlots <- struct{}{}
+	defer func() { <-crawlSlots }()
+
+	// in static generation mode wait
 	// for all items to complete before exiting
 	if *staticMode {
 		defer wg.Done()
 	}
 
-	dashboardItem, ok := dashboardItems.read(name)
+	item, version, ok := dashboardItems.read(key)
 	if !ok {
 		return
 	}
 
 	// uncomment for debuging single item
-	//if name != "item_name" { return }
+	//if key != "namespace/item_name" { return }
 
-	// echo metadata
-	log.Info("Starting icon crawl for '", name, "' at '", dashboardItem.URL)
+	// cluster object name: the part of the "namespace/name" store key after the slash
+	name := key[strings.LastIndex(key, "/")+1:]
 
-	findHtmlTitle(name, &dashboardItem)
+	log.Info("Starting icon crawl for '", key, "' at '", item.URL)
 
-	for key, val := range dashboardItem.Labels {
-		// check for app.kubernetes.io/instance label
-		if key == "app.kubernetes.io/instance" {
-			findIconGitHub(&dashboardItem, val)
-			log.Debug("GitHub icon search, based on '", val, "' returned: ", dashboardItem.IconURL)
+	page := fetchSite(item.URL)
+	if item.WebpageTitle == "" {
+		item.WebpageTitle = pageTitle(page, name)
+	}
+
+	if item.IconURL != "" {
+		// the icon was chosen in the configuration or by an annotation,
+		// in static mode only a local copy of it is made
+		if *staticMode {
+			item.IconURL = downloadIcon(item.IconURL)
 		}
-		// check for app.kubernetes.io/name label
-		if key == "app.kubernetes.io/name" {
-			findIconGitHub(&dashboardItem, val)
-			log.Debug("GitHub icon search, based on '", val, "' returned: ", dashboardItem.IconURL)
+	} else {
+		iconURL, icon := findIcon(&item, page)
+		switch {
+		case icon == nil:
+			// last resort - generate avatar
+			getGeneratedIcon(&item, key)
+		case *staticMode:
+			item.IconURL = saveIcon(icon)
+		default:
+			item.IconURL = iconURL
 		}
 	}
-	checkedNames := map[string]bool{}
 
-	// check Icons on GitHub based on Ingress name
-	checkedNames[name] = true
-	findIconGitHub(&dashboardItem, strings.ToLower(name))
-
-	// check Icons on GitHub based on site title first word
-	titleFirstWord := firstWord(dashboardItem.WebpageTitle)
-	if !checkedNames[titleFirstWord] {
-		checkedNames[titleFirstWord] = true
-		findIconGitHub(&dashboardItem, titleFirstWord)
+	// write result, unless the item was changed or deleted while crawling
+	if !dashboardItems.writeIfVersion(key, version, item) {
+		log.Info("Discarding crawl result for '", key, "': item changed while crawling")
+		return
 	}
+	log.Info("Icon crawl result for '", key, "': icon - ", item.IconURL, ", title - ", item.WebpageTitle)
+}
 
-	// check Icons on GitHub based on site title spaces to dashes
-	titleWithDashes := strings.ToLower(strings.ReplaceAll(dashboardItem.WebpageTitle, " ", "-"))
-	if !checkedNames[titleWithDashes] {
-		checkedNames[titleWithDashes] = true
-		findIconGitHub(&dashboardItem, titleWithDashes)
+func pageTitle(page *sitePage, name string) string {
+	if page != nil && page.title != "" {
+		return page.title
 	}
-
-	// check header for PNG
-	findHtmlIcon(&dashboardItem, "png")
-
-	// check header for SVG
-	findHtmlIcon(&dashboardItem, "svg")
-
-	// check header with https://pkg.go.dev/go.deanishe.net/favicon
-	findHtmlIconDeanishe(&dashboardItem)
-
-	// check for first level of DNS domain
-	addressPrefix := strings.Split(getHostFromURL(dashboardItem.URL), ".")[0]
-	if !checkedNames[addressPrefix] {
-		checkedNames[addressPrefix] = true
-		findIconGitHub(&dashboardItem, addressPrefix)
-	}
-
-	// last resort - generate avatar
-	getGeneratedIcon(&dashboardItem, name)
-
-	// download if static mode
-	if *staticMode {
-		downloadedIconFile := downloadIcon(dashboardItem.IconURL)
-		log.Info("Downloaded icon file: ", downloadedIconFile, ", from: ", dashboardItem.IconURL)
-		dashboardItem.IconURL = downloadedIconFile
-	}
-
-	// write result
-	dashboardItems.write(name, dashboardItem)
-	log.Info("Icon crawl result for '", name, "': icon - ", dashboardItem.IconURL, ", title - ", dashboardItem.WebpageTitle)
+	return name
 }
 
 func refreshItems() {
-	for _, name := range dashboardItems.getKeys() {
+	for _, key := range dashboardItems.getKeys() {
 		if *staticMode {
 			wg.Add(1)
 		}
-		go crawlItem(name)
+		go crawlItem(key)
 	}
 	if *staticMode {
 		wg.Wait()

@@ -1,15 +1,19 @@
 # Docker image definition
 
 # first stage builds Vue frontend
-FROM node:18 AS vue-build
+FROM node:24 AS vue-build
 
 ARG TARGETARCH
 
 WORKDIR /build
 COPY ./frontend .
 
-RUN npm install -g pnpm && \
-  pnpm install && \
+# pnpm version is pinned in frontend/package.json ("packageManager"), so that exact
+# release is activated via corepack instead of installing "latest" globally.
+# COREPACK_ENABLE_DOWNLOAD_PROMPT keeps corepack non-interactive while fetching it.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable pnpm && \
+  pnpm install --frozen-lockfile && \
   pnpm run build
 
 # second stage builds Go backend

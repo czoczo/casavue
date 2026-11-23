@@ -6,6 +6,11 @@ customization:
   # influences page title and PWA name
   name: CasaVue
 
+  # Own logo as a base64 encoded SVG (e.g. `base64 -w0 logo.svg`): source of the
+  # favicons, the PWA icons and the dashboard header logo. Its "#000000" is repainted
+  # with the theme contrast color.
+  # logo: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmci... 
+
   colors:
     # main color
     theme: "#deaded"
@@ -29,6 +34,14 @@ content_filters:
       
     # Go regexp syntax compatible (https://pkg.go.dev/regexp/syntax)
     # catches all values by default
+    # whitespace of the value is ignored, so a pattern may span lines, e.g.:
+    #   mode: "exclude"
+    #   pattern: >-
+    #     ^(
+    #       kube-.* |
+    #       traefik |
+    #       monitoring.*
+    #     )$
     pattern: "^.*$"
 
   item:
@@ -40,6 +53,14 @@ content_filters:
 
     # Go regexp syntax compatible (https://pkg.go.dev/regexp/syntax)
     # catches all values by default
+    # whitespace of the value is ignored, so a pattern may span lines, e.g.:
+    #   mode: "exclude"
+    #   pattern: >-
+    #     ^(
+    #       .*-canary |
+    #       .*-test.* |
+    #       staging-.*
+    #     )$
     pattern: "^.*$"
     
 # Allows connections to servers with an invalid TLS certificate

@@ -1,35 +1,48 @@
 #
 name: Create and publish a Docker image
 
-# Configures this workflow to run every time a change is pushed to the branch called `release`.
 on:
   push:
     branches: [ main ]
     paths: [ VERSION_APP.txt ]
   workflow_dispatch:
-  #workflow_call:
 
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
-permissions: write-all
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+  security-events: write
 
-# There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
   build-and-push-image:
+    needs: test
     strategy:
       matrix:
         flavour: [distroless]
     runs-on: ubuntu-latest
-    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
-    #permissions:
-    #  contents: read
-    #  packages: write
-    #  attestations: write
-    #  id-token: write
-    permissions: write-all
 
     steps:
       - name: Checkout repository
@@ -118,6 +131,8 @@ jobs:
 
   create_app_version_tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     needs:
       - build-and-push-image
     if: needs.build-and-push-image.result == 'success'

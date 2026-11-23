@@ -7,8 +7,35 @@ rules:
     resources: [ingresses]
     verbs: [list, watch, get]
   - apiGroups: [gateway.networking.k8s.io]
-    resources: [httproutes]
+    resources: [httproutes, gateways]
     verbs: [list, watch, get]
+---
+# CasaVue watches its own configuration ConfigMaps over the API, so a `helm upgrade` is
+# applied in about a second instead of after the kubelet volume sync of up to a minute.
+# Deliberately a Role and not part of the ClusterRole: those two ConfigMaps are the only
+# ones worth reading and they live in the namespace of the release. Narrowing the rule
+# down to their names is not possible, a watch is a collection request.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "casavue.fullname" . }}-config
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "casavue.fullname" . }}-config
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "casavue.fullname" . }}-config
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "casavue.serviceAccountName" . }}
+    namespace: {{.Release.Namespace}}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

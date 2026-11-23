@@ -17,6 +17,9 @@ func initHttpServer() {
 	// avatars.go
 	http.HandleFunc("/avatars/", avatarHandler)
 
+	// icons.go
+	http.HandleFunc("/icons/", iconProxyHandler)
+
 	// statuses.go
 	http.HandleFunc("/statusCheck/", statusCheckHandler)
 
@@ -43,8 +46,15 @@ func entriesApiHandler(w http.ResponseWriter, r *http.Request) {
 	// Set the content type to JSON
 	w.Header().Set("Content-Type", "application/json")
 
+	items := dashboardItems.get()
+	if !*staticMode {
+		// the dashboard loads its icons from this server, which is the only way
+		// the browser gets them from the hosts refusing a foreign page
+		items = proxiedIcons(items)
+	}
+
 	// Marshal the dashboardItems to JSON
-	jsonData, err := json.Marshal(dashboardItems.get())
+	jsonData, err := json.Marshal(items)
 	if err != nil {
 		http.Error(w, "Error marshalling JSON", http.StatusInternalServerError)
 		return

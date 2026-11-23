@@ -115,7 +115,15 @@ export default {
               this.visibleNamespaces[this.data[key].namespace] = true;
             }
             if (!this.itemsStatus[key]) {
-              this.itemsStatus[key] = {name: key, url: this.data[key].url, status: "gray"};
+              this.itemsStatus[key] = {name: key, status: "gray"};
+            }
+          }
+
+          // drop status of items which disappeared from the dashboard,
+          // so they are not checked forever
+          for (const key in this.itemsStatus) {
+            if (!this.data[key]) {
+              delete this.itemsStatus[key];
             }
           }
 
@@ -150,7 +158,7 @@ export default {
     async checkSiteAvailability() {
       for (const item in this.itemsStatus) {
         try {
-          const response = await axios.head('/statusCheck/?url=' + this.itemsStatus[item].url);
+          const response = await axios.head('/statusCheck/?item=' + encodeURIComponent(item));
           this.updateSiteStatus(item, response.status);
         } catch (error) {
           this.updateSiteStatus(item, error.response ? error.response.status : 'unknown');
@@ -158,9 +166,17 @@ export default {
       }
     },
     updateSiteStatus(name, status) {
+      if (!this.itemsStatus[name]) {
+        // the item left the dashboard while its check was running
+        return;
+      }
+      // 424 comes from CasaVue: the site answered, with an untrusted certificate
+      if (status === 424) {
+        this.itemsStatus[name].status = 'badcert';
+        return;
+      }
       const validStatusCodes = [200, 401];
-      const siteStatus = validStatusCodes.includes(status) ? 'green' : 'red';
-      this.itemsStatus[name] = {name: name, url: this.data[name].url, status: siteStatus};
+      this.itemsStatus[name].status = validStatusCodes.includes(status) ? 'green' : 'red';
     },
   },
   created() {
