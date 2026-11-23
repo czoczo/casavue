@@ -17,7 +17,8 @@ RUN corepack enable pnpm && \
   pnpm run build
 
 # second stage builds Go backend
-FROM golang:1.24-bookworm AS go-build
+# Go >= 1.26.10: the CI Trivy gate fails the build on HIGH/CRITICAL CVEs, Go stdlib included.
+FROM golang:1.26-bookworm AS go-build
 
 WORKDIR /go/src/app
 
