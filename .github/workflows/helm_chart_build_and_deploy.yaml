@@ -20,7 +20,8 @@ jobs:
           fetch-depth: 0
       
       - name: Run Trivy vulnerability scanner to index vulnerabilities 
-        uses: aquasecurity/trivy-action@0.23.0
+        # upstream deleted the old tags without the `v` prefix; only v0.23.0 resolves now
+        uses: aquasecurity/trivy-action@v0.23.0
         with:
           scan-type: 'config'
           format: 'sarif'
@@ -29,12 +30,12 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         if: success() || failure()
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
         
       - name: Run Trivy vulnerability scanner to fail on HIGH and CRITICAL
-        uses: aquasecurity/trivy-action@0.23.0
+        uses: aquasecurity/trivy-action@v0.23.0
         with:
           scan-type: 'config'
           hide-progress: true
