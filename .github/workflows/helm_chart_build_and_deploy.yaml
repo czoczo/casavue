@@ -6,9 +6,12 @@ on:
     paths: [ VERSION_CHART.txt ]
   workflow_dispatch:
 
+# pages/id-token must be granted here too: a reusable workflow cannot request more than its caller
 permissions:
   contents: write
   security-events: write
+  pages: write
+  id-token: write
 
 jobs:
   build-helm-chart:
