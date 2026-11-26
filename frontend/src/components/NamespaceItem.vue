@@ -70,10 +70,10 @@ export default {
 .item {
   margin: 4px;
   padding: 6px;
+  border-radius: var(--radius);
   background-color: var(--base-color-light);
-  -webkit-transition: background 1s; 
-  transition: background 1s;
-  box-shadow: rgba(60, 64, 67, 0.3) 0px 1px 2px 0px, rgba(60, 64, 67, 0.15) 0px 2px 6px 2px;
+  transition: background-color 160ms, box-shadow 160ms;
+  box-shadow: var(--shadow-1);
 }
 
 .item-content {
@@ -86,6 +86,9 @@ export default {
 
 .item:hover {
   background-color: var(--theme-color-50);
+  /* mixed towards the theme color, so the hover works on a light and on a dark item */
+  background-color: color-mix(in srgb, var(--base-color-light), var(--theme-color) 12%);
+  box-shadow: var(--shadow-2);
 }
 /*.item.item-content.circle-status svg{*/
 .item:hover svg{

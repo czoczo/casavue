@@ -93,6 +93,11 @@ export default {
   --theme-color-70: hsla(var(--theme-color-hsl), .7);
   --theme-color-80: hsla(var(--theme-color-hsl), .8);
   --theme-color-90: hsla(var(--theme-color-hsl), .9);
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / .08), 0 2px 6px rgb(0 0 0 / .12);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / .14), 0 10px 24px rgb(0 0 0 / .18);
 }
 
 @import url('https://fonts.googleapis.com/css?family=Archivo+Black');

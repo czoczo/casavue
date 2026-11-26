@@ -25,6 +25,8 @@ footer {
   border-top: 1px var(--theme-color-20) solid;
   padding: 10px 0px;
   color: var(--base-color-contrast);
+  /* the app name and version are secondary information: mixed back from full contrast */
+  color: color-mix(in srgb, var(--base-color-contrast) 60%, transparent);
 }
 
 footer svg {

@@ -26,6 +26,7 @@
   - Fixed dashboard breaking after an item was removed while its status was being checked.
   - Status of removed items is no longer kept and re-checked.
   - An HTTPS item with an untrusted certificate shows `Invalid TLS certificate` instead of `Site unavailable`.
+  - Dashboard cards are rounded with a softer shadow and a hover state, the search field is rounded and the footer text is muted.
 
 ## 0.1.3
 - WebUI: Fixed items not showing on dashboard when no labels on Ingress resource.

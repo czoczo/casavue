@@ -110,6 +110,7 @@ export default {
   background-color: white;
   padding-left: 40px;
   border: none;
+  border-radius: var(--radius-sm);
   padding: 6px 4px 6px 40px;
 }
 

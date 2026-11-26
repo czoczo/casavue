@@ -213,6 +213,9 @@ a:active { text-decoration: none; }
   gap: .1rem;
   margin: 0 auto;
   overflow: auto;
+  /* #items clips what its overflow:auto box shows, so the hover shadow of the outer cards
+     (--shadow-2 reaches ~22px below a card) is cut without this padding */
+  padding: 12px 12px 22px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
 }
